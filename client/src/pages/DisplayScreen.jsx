@@ -175,12 +175,14 @@ export default function DisplayScreen() {
           src={posterUrl}
           alt=""
           aria-hidden="true"
-          className={`absolute inset-0 h-full w-full object-cover ${
+          className={`absolute inset-0 h-full w-full ${
             layout === 'poster'
-              ? celebrating
-                ? 'animate-poster-unveil-pop scale-100 brightness-100 blur-none'
-                : 'scale-100 brightness-100 blur-none transition-all duration-700'
-              : 'scale-105 brightness-[0.35] blur-sm transition-all duration-700'
+              ? `object-contain ${
+                  celebrating
+                    ? 'animate-poster-unveil-pop scale-100 brightness-100 blur-none'
+                    : 'scale-100 brightness-100 blur-none transition-all duration-700'
+                }`
+              : 'object-cover scale-105 brightness-[0.35] blur-sm transition-all duration-700'
           }`}
         />
       )}
