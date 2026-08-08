@@ -5,106 +5,104 @@ import { RTC_CONFIG } from '../services/webrtcConfig.js';
 export default function LiveCamera() {
   const { connected, socket } = usePresentationSocket('camera');
   const localVideoRef = useRef(null);
-  const pcRef = useRef(null);
   const localStreamRef = useRef(null);
-  const displaySocketIdRef = useRef(null);
-  const pendingLocalCandidatesRef = useRef([]);
-  const pendingRemoteCandidatesRef = useRef([]);
+
+  // One RTCPeerConnection per connected display — WebRTC has no built-in
+  // fan-out, so broadcasting to N displays means N independent peer
+  // connections, each with its own offer/answer/ICE exchange, all carrying
+  // the same local tracks. Keyed by the display's socket id.
+  const peersRef = useRef(new Map()); // displayId -> { pc, pendingRemoteCandidates }
+  // Displays the server has told us about, kept even before we have a local
+  // stream so we know who to negotiate with the moment the camera starts.
+  const knownDisplayIdsRef = useRef(new Set());
 
   const [status, setStatus] = useState('idle'); // idle | starting | connecting | live | error
   const [error, setError] = useState('');
+  const [liveCount, setLiveCount] = useState(0);
 
-  // Every negotiation attempt gets a brand-new RTCPeerConnection. Reusing a
-  // peer connection across a display refresh/reconnect left it stuck in a
-  // stale ICE state, which was the main cause of live video failing to
-  // (re)connect after the first attempt.
+  const recomputeStatus = useCallback(() => {
+    const states = [...peersRef.current.values()].map((p) => p.pc.connectionState);
+    const live = states.filter((s) => s === 'connected').length;
+    setLiveCount(live);
+    if (live > 0) setStatus('live');
+    else if (states.some((s) => s === 'connecting' || s === 'new')) setStatus('connecting');
+    else if (localStreamRef.current) setStatus('starting');
+    else setStatus('idle');
+  }, []);
+
+  // Opens a fresh, dedicated peer connection to one display. Always torn
+  // down and rebuilt rather than reused on renegotiation — a reused
+  // connection was the main cause of live video getting stuck after a
+  // display refresh/reconnect.
   const negotiate = useCallback(
-    async (socketInstance) => {
+    async (socketInstance, displayId) => {
       const stream = localStreamRef.current;
       if (!stream || !socketInstance) return;
 
-      pcRef.current?.close();
-      pendingLocalCandidatesRef.current = [];
-      pendingRemoteCandidatesRef.current = [];
-      displaySocketIdRef.current = null;
+      peersRef.current.get(displayId)?.pc.close();
 
       const pc = new RTCPeerConnection(RTC_CONFIG);
-      pcRef.current = pc;
+      const peer = { pc, pendingRemoteCandidates: [] };
+      peersRef.current.set(displayId, peer);
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
       pc.onicecandidate = (event) => {
         if (!event.candidate) return;
-        if (displaySocketIdRef.current) {
-          socketInstance.emit('webrtc:ice-candidate', {
-            candidate: event.candidate,
-            to: displaySocketIdRef.current,
-          });
-        } else {
-          pendingLocalCandidatesRef.current.push(event.candidate);
-        }
+        socketInstance.emit('webrtc:ice-candidate', { candidate: event.candidate, to: displayId });
       };
 
       pc.onconnectionstatechange = () => {
-        if (pc.connectionState === 'connected') setStatus('live');
-        if (pc.connectionState === 'connecting') setStatus('connecting');
-        if (['failed', 'disconnected'].includes(pc.connectionState)) {
-          setStatus('starting');
+        recomputeStatus();
+        if (['failed', 'disconnected', 'closed'].includes(pc.connectionState)) {
+          peersRef.current.delete(displayId);
+          recomputeStatus();
         }
       };
 
-      setStatus('connecting');
       const offer = await pc.createOffer();
       await pc.setLocalDescription(offer);
-      socketInstance.emit('webrtc:offer', { offer });
+      socketInstance.emit('webrtc:offer', { offer, to: displayId });
+      recomputeStatus();
     },
-    []
+    [recomputeStatus]
   );
 
   useEffect(() => {
     if (!socket) return;
 
-    function handleDisplayReady() {
-      negotiate(socket);
+    function handleDisplayReady({ displayId }) {
+      knownDisplayIdsRef.current.add(displayId);
+      if (localStreamRef.current) negotiate(socket, displayId);
     }
 
     async function handleAnswer({ answer, from }) {
-      const pc = pcRef.current;
-      if (!pc) return;
-      displaySocketIdRef.current = from;
-      await pc.setRemoteDescription(new RTCSessionDescription(answer));
-
-      // Flush ICE candidates queued on both sides while negotiation was in flight.
-      pendingLocalCandidatesRef.current.forEach((candidate) => {
-        socket.emit('webrtc:ice-candidate', { candidate, to: from });
-      });
-      pendingLocalCandidatesRef.current = [];
-
-      for (const candidate of pendingRemoteCandidatesRef.current) {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
+      const peer = peersRef.current.get(from);
+      if (!peer) return;
+      await peer.pc.setRemoteDescription(new RTCSessionDescription(answer));
+      for (const candidate of peer.pendingRemoteCandidates) {
+        await peer.pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(() => {});
       }
-      pendingRemoteCandidatesRef.current = [];
+      peer.pendingRemoteCandidates = [];
     }
 
-    async function handleIceCandidate({ candidate }) {
-      const pc = pcRef.current;
-      if (!pc?.remoteDescription) {
-        pendingRemoteCandidatesRef.current.push(candidate);
+    async function handleIceCandidate({ candidate, from }) {
+      const peer = peersRef.current.get(from);
+      if (!peer?.pc.remoteDescription) {
+        peer?.pendingRemoteCandidates.push(candidate);
         return;
       }
       try {
-        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        await peer.pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
         console.error('[camera] failed to add ICE candidate:', err.message);
       }
     }
 
-    function handleDisplayLeft() {
-      // The presentation screen went away mid-call; keep the camera/mic
-      // running so we can renegotiate instantly once a display reconnects.
-      pcRef.current?.close();
-      pcRef.current = null;
-      displaySocketIdRef.current = null;
-      if (localStreamRef.current) setStatus('starting');
+    function handleDisplayLeft({ displayId }) {
+      knownDisplayIdsRef.current.delete(displayId);
+      peersRef.current.get(displayId)?.pc.close();
+      peersRef.current.delete(displayId);
+      recomputeStatus();
     }
 
     function handleStop() {
@@ -124,6 +122,7 @@ export default function LiveCamera() {
       socket.off('webrtc:display-left', handleDisplayLeft);
       socket.off('webrtc:stop', handleStop);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, negotiate]);
 
   async function startCamera() {
@@ -141,9 +140,12 @@ export default function LiveCamera() {
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-      // If a display is already connected, negotiate right away; otherwise
-      // wait for the "display-ready" signal once one shows up.
-      await negotiate(socket);
+      // Negotiate with every display already known about; any display that
+      // connects later triggers its own negotiation via handleDisplayReady.
+      recomputeStatus();
+      await Promise.all(
+        [...knownDisplayIdsRef.current].map((displayId) => negotiate(socket, displayId))
+      );
     } catch (err) {
       setError(err.message || 'Could not access camera/microphone');
       setStatus('error');
@@ -151,14 +153,12 @@ export default function LiveCamera() {
   }
 
   function stopCamera() {
-    pcRef.current?.close();
-    pcRef.current = null;
+    for (const peer of peersRef.current.values()) peer.pc.close();
+    peersRef.current.clear();
     localStreamRef.current?.getTracks().forEach((track) => track.stop());
     localStreamRef.current = null;
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
-    displaySocketIdRef.current = null;
-    pendingLocalCandidatesRef.current = [];
-    pendingRemoteCandidatesRef.current = [];
+    setLiveCount(0);
     setStatus('idle');
   }
 
@@ -168,7 +168,7 @@ export default function LiveCamera() {
     idle: 'Idle',
     starting: 'Waiting for display screen...',
     connecting: 'Connecting...',
-    live: 'Live',
+    live: liveCount > 1 ? `Live to ${liveCount} screens` : 'Live',
     error: 'Error',
   }[status];
 

@@ -20,8 +20,11 @@ function requireAdminAck(socket, ack) {
 }
 
 export function initSocket(io) {
-  // WebRTC signaling registry: single active display + single active camera (MVP scope).
-  const registry = { displaySocketId: null, cameraSocketId: null };
+  // WebRTC signaling registry: any number of displays + a single active
+  // camera (MVP scope). The camera opens one dedicated RTCPeerConnection per
+  // display, so signaling is routed point-to-point by socket id rather than
+  // broadcast — each display only ever hears about its own connection.
+  const registry = { displaySocketIds: new Set(), cameraSocketId: null };
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
@@ -48,38 +51,42 @@ export function initSocket(io) {
 
     // ---- Presentation registry (display / camera) for WebRTC signaling ----
     if (role === 'display') {
-      registry.displaySocketId = socket.id;
+      registry.displaySocketIds.add(socket.id);
       if (registry.cameraSocketId) {
-        io.to(registry.cameraSocketId).emit('webrtc:display-ready');
+        io.to(registry.cameraSocketId).emit('webrtc:display-ready', { displayId: socket.id });
       }
     }
 
     if (role === 'camera') {
       registry.cameraSocketId = socket.id;
-      if (registry.displaySocketId) {
-        socket.emit('webrtc:display-ready');
+      // Tell the (re)connecting camera about every display that's already
+      // up, so it opens a dedicated peer connection to each one.
+      for (const displayId of registry.displaySocketIds) {
+        socket.emit('webrtc:display-ready', { displayId });
       }
     }
 
     socket.on('disconnect', () => {
-      if (registry.displaySocketId === socket.id) {
-        registry.displaySocketId = null;
+      if (registry.displaySocketIds.has(socket.id)) {
+        registry.displaySocketIds.delete(socket.id);
         if (registry.cameraSocketId) {
-          io.to(registry.cameraSocketId).emit('webrtc:display-left');
+          io.to(registry.cameraSocketId).emit('webrtc:display-left', { displayId: socket.id });
         }
       }
       if (registry.cameraSocketId === socket.id) {
         registry.cameraSocketId = null;
-        if (registry.displaySocketId) {
-          io.to(registry.displaySocketId).emit('webrtc:camera-left');
+        for (const displayId of registry.displaySocketIds) {
+          io.to(displayId).emit('webrtc:camera-left');
         }
       }
     });
 
     // ---- WebRTC signaling relay ----
-    socket.on('webrtc:offer', ({ offer }) => {
-      if (registry.displaySocketId) {
-        io.to(registry.displaySocketId).emit('webrtc:offer', { offer, from: socket.id });
+    // Offer is now targeted (camera addresses each display individually,
+    // since it holds a separate RTCPeerConnection per display).
+    socket.on('webrtc:offer', ({ offer, to }) => {
+      if (to) {
+        io.to(to).emit('webrtc:offer', { offer, from: socket.id });
       }
     });
 
