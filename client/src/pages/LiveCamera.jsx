@@ -130,7 +130,14 @@ export default function LiveCamera() {
     setError('');
     setStatus('starting');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      // Prefer the rear/environment-facing camera — this is a live coverage
+      // tool meant to film the event, not a selfie cam. `ideal` (not `exact`)
+      // so it still falls back gracefully on devices with only one camera
+      // (laptops, desktops).
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: true,
+      });
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
