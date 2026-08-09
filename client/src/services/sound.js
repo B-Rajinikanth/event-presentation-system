@@ -104,34 +104,87 @@ export function playUnveilTick(urgent = false) {
   });
 }
 
-// Applause for the poster reveal: dozens of short, randomly-timed filtered
-// noise bursts (individual "claps") layered over ~1.8s, plus a broad low
-// burst underneath for body — this is the standard way to procedurally fake
-// a crowd clapping, since a real clap is itself just a noise transient.
+// A rising, sweeping noise burst — filter center frequency ramps up fast —
+// used as a cinematic "whoosh" build-up right before a hit lands.
+function playWhoosh(ctx, startAt) {
+  const source = ctx.createBufferSource();
+  source.buffer = getNoiseBuffer(ctx);
+
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'bandpass';
+  filter.Q.value = 0.7;
+  filter.frequency.setValueAtTime(400, startAt);
+  filter.frequency.exponentialRampToValueAtTime(3500, startAt + 0.18);
+
+  const gainNode = ctx.createGain();
+  gainNode.gain.setValueAtTime(0, startAt);
+  gainNode.gain.linearRampToValueAtTime(0.3, startAt + 0.05);
+  gainNode.gain.exponentialRampToValueAtTime(0.001, startAt + 0.2);
+
+  source.connect(filter);
+  filter.connect(gainNode);
+  gainNode.connect(ctx.destination);
+  source.start(startAt);
+  source.stop(startAt + 0.25);
+}
+
+// The poster reveal: a full celebration cue, not just one effect layered —
+// a whoosh build-up leads into a triumphant ascending chord hit (the
+// "fanfare"), with a crowd applause bed and a scatter of high sparkle pings
+// underneath for the "something wonderful just happened" feeling.
 export function playUnveilReveal() {
   const ctx = getContext();
   if (ctx.state === 'suspended') return;
   const now = ctx.currentTime;
-  const spread = 1.8;
 
-  playNoiseBurst(ctx, {
-    startAt: now,
-    duration: spread,
-    gain: 0.16,
-    filterFreq: 1100,
-    filterQ: 0.5,
-    filterType: 'bandpass',
+  playWhoosh(ctx, now);
+
+  // Ascending arpeggio leading into a bright three-note chord landing —
+  // the fanfare / "ta-da" moment.
+  const fanfareStart = now + 0.16;
+  const arpeggio = [523.25, 659.25, 783.99]; // C5 E5 G5
+  arpeggio.forEach((freq, i) => {
+    playTone(freq, { duration: 0.22, type: 'triangle', gain: 0.24, startDelay: fanfareStart - now + i * 0.08 });
+  });
+  const chordDelay = fanfareStart - now + arpeggio.length * 0.08;
+  [1046.5, 1318.51, 1567.98].forEach((freq) => {
+    // C6 E6 G6
+    playTone(freq, { duration: 0.7, type: 'triangle', gain: 0.2, startDelay: chordDelay });
   });
 
-  const clapCount = 65;
+  // Crowd applause bed: dozens of short, randomly-timed filtered noise
+  // bursts (individual "claps"), plus a broad low burst underneath for
+  // body — the standard way to procedurally fake clapping, since a real
+  // clap is itself just a noise transient.
+  const spread = 2;
+  const applauseStart = now + 0.1;
+  playNoiseBurst(ctx, {
+    startAt: applauseStart,
+    duration: spread,
+    gain: 0.14,
+    filterFreq: 1100,
+    filterQ: 0.5,
+  });
+  const clapCount = 60;
   for (let i = 0; i < clapCount; i++) {
-    const startAt = now + Math.random() * spread;
     playNoiseBurst(ctx, {
-      startAt,
+      startAt: applauseStart + Math.random() * spread,
       duration: 0.03 + Math.random() * 0.05,
-      gain: 0.22 + Math.random() * 0.28,
+      gain: 0.16 + Math.random() * 0.22,
       filterFreq: 1500 + Math.random() * 2200,
       filterQ: 0.9,
+    });
+  }
+
+  // Sparkle/shimmer: a scatter of quiet high bell-like pings across the
+  // first second, like glitter catching light.
+  const sparkleCount = 14;
+  for (let i = 0; i < sparkleCount; i++) {
+    playTone(1800 + Math.random() * 2600, {
+      duration: 0.2 + Math.random() * 0.15,
+      type: 'sine',
+      gain: 0.07,
+      startDelay: Math.random() * 1.1,
     });
   }
 }
