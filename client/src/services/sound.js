@@ -130,8 +130,8 @@ function playWhoosh(ctx, startAt) {
 
 // The poster reveal: a full celebration cue, not just one effect layered —
 // a whoosh build-up leads into a triumphant ascending chord hit (the
-// "fanfare"), with a crowd applause bed and a scatter of high sparkle pings
-// underneath for the "something wonderful just happened" feeling.
+// "fanfare"), with a crowd applause bed underneath for the "something
+// wonderful just happened" feeling.
 export function playUnveilReveal() {
   const ctx = getContext();
   if (ctx.state === 'suspended') return;
@@ -173,18 +173,6 @@ export function playUnveilReveal() {
       gain: 0.16 + Math.random() * 0.22,
       filterFreq: 1500 + Math.random() * 2200,
       filterQ: 0.9,
-    });
-  }
-
-  // Sparkle/shimmer: a scatter of quiet high bell-like pings across the
-  // first second, like glitter catching light.
-  const sparkleCount = 14;
-  for (let i = 0; i < sparkleCount; i++) {
-    playTone(1800 + Math.random() * 2600, {
-      duration: 0.2 + Math.random() * 0.15,
-      type: 'sine',
-      gain: 0.07,
-      startDelay: Math.random() * 1.1,
     });
   }
 }
