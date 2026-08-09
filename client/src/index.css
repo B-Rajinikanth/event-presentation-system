@@ -117,24 +117,19 @@ body {
   animation: poster-unveil-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* Poster Unveil countdown digit: a gradient-filled glyph (via
-   background-clip: text) with a colored glow, styled after a neon-sign
-   countdown reference. text-shadow still renders against the glyph's shape
-   even though its own fill is transparent. All offsets are in em so the
-   effect scales with the component's font-size instead of needing separate
-   breakpoints. */
+/* Poster Unveil countdown digit: a crisp gradient-filled glyph (via
+   background-clip: text), styled after a neon-sign countdown reference.
+   Deliberately no text-shadow — at the huge font sizes this renders at, even
+   a small em-based blur radius becomes dozens of pixels, which read as a
+   blurry/illegible digit rather than a glow. The neon "glow and animation"
+   look instead comes entirely from the ring around it (see
+   .poster-unveil-ring-glow / -spin below), keeping the number itself sharp. */
 .poster-unveil-neon-digit {
   background: linear-gradient(135deg, #6ee7b7 0%, #22d3ee 45%, #a855f7 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
-  /* Kept deliberately soft — a strong glow this close to the glyph washes
-     everything the same color and hides the gradient fill underneath it. */
-  text-shadow:
-    0 0 0.05em rgba(110, 231, 183, 0.55),
-    0 0 0.16em rgba(34, 211, 238, 0.4),
-    0 0 0.36em rgba(168, 85, 247, 0.35);
 }
 
 @keyframes neon-pulse {

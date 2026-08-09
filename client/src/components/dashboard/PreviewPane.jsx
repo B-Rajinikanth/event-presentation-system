@@ -38,7 +38,7 @@ export default function PreviewPane() {
       <div className="relative flex aspect-video w-full items-center justify-center overflow-hidden rounded-lg border border-slate-800 bg-black">
         {layout === 'idle' && <span className="text-sm text-slate-600">No active presentation</span>}
 
-        {posterUrl && layout !== 'idle' && (
+        {posterUrl && layout !== 'idle' && layout !== 'poster_unveil' && (
           <img
             src={posterUrl}
             alt=""
@@ -81,7 +81,7 @@ export default function PreviewPane() {
         )}
 
         {showUnveilCountdown && (
-          <div className="relative flex h-full w-full flex-col items-center justify-center gap-1">
+          <div className="relative flex h-full w-full flex-col items-center justify-center gap-1 bg-slate-950">
             <span className="text-[0.55rem] font-semibold uppercase tracking-[0.3em] text-emerald-300">
               Unveiling In
             </span>

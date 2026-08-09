@@ -29,13 +29,22 @@ function FlipNumber({ value }) {
   return (
     <span className="relative inline-block [perspective:600px]">
       <span
-        className={`poster-unveil-neon-digit relative inline-block [transform-style:preserve-3d] ${
+        className={`relative inline-block [transform-style:preserve-3d] ${
           flipping ? 'animate-flip-card' : ''
         }`}
       >
-        <span className="inline-block [backface-visibility:hidden]">{displayed}</span>
+        {/* The gradient/glow class must live on the element that directly
+            wraps the digit text — background-clip: text clips to *this*
+            element's own text content, not a descendant's. Putting it on
+            the flip wrapper above (which has no text of its own) meant the
+            gradient fill never actually applied; only the blurred
+            text-shadow copies were visible, which is what read as "blurry"
+            digits with no crisp fill underneath. */}
+        <span className="poster-unveil-neon-digit inline-block [backface-visibility:hidden]">
+          {displayed}
+        </span>
         {flipping && (
-          <span className="absolute inset-0 flex items-center justify-center [backface-visibility:hidden] [transform:rotateX(180deg)]">
+          <span className="poster-unveil-neon-digit absolute inset-0 flex items-center justify-center [backface-visibility:hidden] [transform:rotateX(180deg)]">
             {incoming}
           </span>
         )}

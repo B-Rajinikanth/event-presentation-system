@@ -173,7 +173,7 @@ export default function DisplayScreen() {
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
-      {posterUrl && layout !== 'idle' && (
+      {posterUrl && layout !== 'idle' && layout !== 'poster_unveil' && (
         <img
           key={layout === 'poster' && celebrating ? `unveil-${celebrateKey}` : 'poster'}
           src={posterUrl}
@@ -235,7 +235,7 @@ export default function DisplayScreen() {
       )}
 
       {showUnveilCountdown && (
-        <div className="relative flex h-full w-full flex-col items-center justify-center gap-6">
+        <div className="relative flex h-full w-full flex-col items-center justify-center gap-6 bg-slate-950">
           <span className="text-sm font-semibold uppercase tracking-[0.5em] text-emerald-300 drop-shadow-[0_0_0.6em_rgba(52,211,153,0.6)] sm:text-lg">
             Unveiling In
           </span>
