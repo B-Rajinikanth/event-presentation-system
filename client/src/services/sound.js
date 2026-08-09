@@ -38,7 +38,7 @@ export function unlockAudio() {
   if (ctx.state === 'suspended') ctx.resume().catch(() => {});
 }
 
-function playTone(freq, { duration = 0.12, type = 'sine', gain = 0.2, startDelay = 0 } = {}) {
+function playTone(freq, { duration = 0.12, type = 'sine', gain = 0.2, startDelay = 0, hardCutoff = false } = {}) {
   const ctx = getContext();
   if (ctx.state === 'suspended') return; // not unlocked yet — skip rather than throw
 
@@ -49,8 +49,15 @@ function playTone(freq, { duration = 0.12, type = 'sine', gain = 0.2, startDelay
 
   const startAt = ctx.currentTime + startDelay;
   gainNode.gain.setValueAtTime(0, startAt);
-  gainNode.gain.linearRampToValueAtTime(gain, startAt + 0.01);
-  gainNode.gain.exponentialRampToValueAtTime(0.001, startAt + duration);
+  gainNode.gain.linearRampToValueAtTime(gain, startAt + 0.008);
+  if (hardCutoff) {
+    // An abrupt cutoff instead of a smooth decay — reads as a crisp
+    // chiptune-style blip rather than a tone trailing off.
+    gainNode.gain.setValueAtTime(gain, startAt + duration * 0.7);
+    gainNode.gain.linearRampToValueAtTime(0.0001, startAt + duration);
+  } else {
+    gainNode.gain.exponentialRampToValueAtTime(0.001, startAt + duration);
+  }
 
   osc.connect(gainNode);
   gainNode.connect(ctx.destination);
@@ -80,27 +87,15 @@ function playNoiseBurst(ctx, { startAt, duration, gain, filterFreq, filterQ = 1,
   source.stop(startAt + duration + 0.02);
 }
 
-// A proper clock tick, not a soft beep: a sharp high click (filtered noise)
-// layered with a low "tock" thump (a short square-wave burst) for weight,
-// the way a real mechanical clock tick has both a click transient and body.
-// Pitches up and gets noticeably louder inside the final few seconds.
+// "Retro Blip" — picked from a set of candidates the user auditioned: a
+// short square-wave blip with a hard-edged cutoff, arcade-style. Pitches up
+// and gets louder inside the final few seconds.
 export function playUnveilTick(urgent = false) {
-  const ctx = getContext();
-  if (ctx.state === 'suspended') return;
-  const now = ctx.currentTime;
-
-  playNoiseBurst(ctx, {
-    startAt: now,
-    duration: urgent ? 0.06 : 0.045,
-    gain: urgent ? 0.6 : 0.42,
-    filterFreq: urgent ? 3400 : 2600,
-    filterQ: 1.4,
-  });
-
-  playTone(urgent ? 240 : 170, {
-    duration: 0.09,
+  playTone(urgent ? 1568 : 1176, {
+    duration: 0.045,
     type: 'square',
-    gain: urgent ? 0.4 : 0.26,
+    gain: urgent ? 0.32 : 0.22,
+    hardCutoff: true,
   });
 }
 
