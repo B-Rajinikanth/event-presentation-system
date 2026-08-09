@@ -44,3 +44,14 @@ export async function updateCountdown(patch) {
   await doc.save();
   return await populateState(doc);
 }
+
+export async function updatePosterUnveilCountdown(patch) {
+  const doc = await getDoc();
+  doc.set(
+    Object.fromEntries(
+      Object.entries(patch).map(([key, value]) => [`posterUnveilCountdown.${key}`, value])
+    )
+  );
+  await doc.save();
+  return await populateState(doc);
+}

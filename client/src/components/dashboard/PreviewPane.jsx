@@ -1,6 +1,7 @@
 import { usePresentationSocket } from '../../hooks/usePresentationSocket.js';
 import { API_BASE_URL } from '../../services/apiBase.js';
 import CountdownDisplay from '../CountdownDisplay.jsx';
+import PosterUnveilCountdown from '../PosterUnveilCountdown.jsx';
 
 export default function PreviewPane() {
   // Uses role="viewer" (not "display") so it doesn't compete with the real
@@ -10,6 +11,7 @@ export default function PreviewPane() {
   const layout = state?.layout ?? 'idle';
   const showCountdown = layout === 'countdown' || layout === 'countdown_live';
   const showLive = layout === 'live' || layout === 'countdown_live';
+  const showUnveilCountdown = layout === 'poster_unveil';
   const posterUrl = state?.activePoster ? `${API_BASE_URL}${state.activePoster.url}` : null;
   const remaining = state?.countdown?.remainingSeconds ?? 0;
   const alertThreshold = state?.countdown?.alertThresholdSeconds ?? 10;
@@ -75,6 +77,18 @@ export default function PreviewPane() {
             <span className="rounded bg-red-600 px-2 py-1 text-xs font-bold uppercase text-white">
               ● Live
             </span>
+          </div>
+        )}
+
+        {showUnveilCountdown && (
+          <div className="relative flex h-full w-full flex-col items-center justify-center gap-1 bg-black/30">
+            <span className="text-[0.55rem] font-semibold uppercase tracking-[0.3em] text-emerald-300">
+              Unveiling In
+            </span>
+            <PosterUnveilCountdown
+              seconds={state?.posterUnveilCountdown?.remainingSeconds}
+              size="text-3xl sm:text-4xl"
+            />
           </div>
         )}
       </div>

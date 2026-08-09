@@ -7,10 +7,11 @@ export default function PosterUnveilControl({ state, onStartUnveil, onCancel, bu
   const [media, setMedia] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState(null);
+  const [seconds, setSeconds] = useState(10);
 
   const eventId = state?.event?._id;
-  const pending = Boolean(state?.pendingUnveil);
-  const remaining = state?.countdown?.remainingSeconds ?? 0;
+  const pending = state?.posterUnveilCountdown?.status === 'running';
+  const remaining = state?.posterUnveilCountdown?.remainingSeconds ?? 0;
 
   useEffect(() => {
     if (!eventId) {
@@ -87,12 +88,26 @@ export default function PosterUnveilControl({ state, onStartUnveil, onCancel, bu
               </button>
             ))}
           </div>
+          <div className="mb-3 flex items-center justify-center gap-2 text-sm text-slate-600 dark:text-slate-300">
+            <label htmlFor="unveil-seconds">Reveal in</label>
+            <input
+              id="unveil-seconds"
+              type="number"
+              min={1}
+              max={300}
+              value={seconds}
+              disabled={busy}
+              onChange={(e) => setSeconds(Math.max(1, Math.min(300, Number(e.target.value) || 1)))}
+              className="w-16 rounded-md border border-slate-300 bg-white px-2 py-1 text-center dark:border-slate-700 dark:bg-slate-800"
+            />
+            <span>sec</span>
+          </div>
           <button
             disabled={busy || !selectedId}
-            onClick={() => onStartUnveil(selectedId)}
+            onClick={() => onStartUnveil(selectedId, seconds)}
             className="w-full rounded-lg bg-gradient-to-r from-fuchsia-600 to-indigo-600 py-2 font-semibold text-white transition hover:from-fuchsia-500 hover:to-indigo-500 disabled:opacity-40"
           >
-            Start Unveil (10s)
+            Start Unveil ({seconds}s)
           </button>
         </>
       )}

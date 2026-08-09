@@ -1,5 +1,5 @@
 import { verifyToken } from '../utils/jwt.js';
-import { getState, updateState, updateCountdown } from './presentationState.js';
+import { getState, updateState, updateCountdown, updatePosterUnveilCountdown } from './presentationState.js';
 import Event from '../models/Event.js';
 import SubEvent from '../models/SubEvent.js';
 import Media from '../models/Media.js';
@@ -38,16 +38,9 @@ export function initSocket(io) {
     next();
   });
 
-  io.on('connection', async (socket) => {
+  io.on('connection', (socket) => {
     const role = socket.handshake.query?.role || 'viewer';
     socket.data.role = role;
-
-    // Send current state immediately on connect.
-    try {
-      socket.emit('state:update', await getState());
-    } catch (err) {
-      console.error('[socket] failed to send initial state:', err.message);
-    }
 
     // ---- Presentation registry (display / camera) for WebRTC signaling ----
     if (role === 'display') {
@@ -124,14 +117,18 @@ export function initSocket(io) {
       if (!requireAdminAck(socket, ack)) return;
       const media = await Media.findById(mediaId);
       if (!media) return ack?.({ ok: false, error: { message: 'Media not found' } });
-      const state = await updateState({ activePoster: media._id, layout: 'poster', pendingUnveil: false });
+      stopUnveilTicking();
+      await updatePosterUnveilCountdown({ status: 'stopped' });
+      const state = await updateState({ activePoster: media._id, layout: 'poster' });
       io.emit('state:update', state);
       ack?.({ ok: true });
     });
 
     socket.on('control:poster:hide', async (_payload, ack) => {
       if (!requireAdminAck(socket, ack)) return;
-      const state = await updateState({ activePoster: null, layout: 'idle', pendingUnveil: false });
+      stopUnveilTicking();
+      await updatePosterUnveilCountdown({ status: 'stopped' });
+      const state = await updateState({ activePoster: null, layout: 'idle' });
       io.emit('state:update', state);
       ack?.({ ok: true });
     });
@@ -142,29 +139,45 @@ export function initSocket(io) {
       if (!allowed.includes(layout)) {
         return ack?.({ ok: false, error: { message: 'Invalid layout' } });
       }
-      const state = await updateState({ layout, pendingUnveil: false });
+      stopUnveilTicking();
+      await updatePosterUnveilCountdown({ status: 'stopped' });
+      const state = await updateState({ layout });
       io.emit('state:update', state);
       ack?.({ ok: true });
     });
 
-    // ---- Poster Unveil: a 10s countdown that auto-reveals a poster with a
-    // celebration effect on the presentation screen when it reaches zero. ----
+    // ---- Poster Unveil: a customizable, seconds-only countdown (kept in its
+    // own posterUnveilCountdown state, separate from the main event
+    // countdown) that auto-reveals a poster with a celebration effect on the
+    // presentation screen when it reaches zero. ----
 
-    socket.on('control:posterUnveil:start', async ({ mediaId }, ack) => {
+    socket.on('control:posterUnveil:start', async ({ mediaId, durationSeconds }, ack) => {
       if (!requireAdminAck(socket, ack)) return;
       const media = await Media.findById(mediaId);
       if (!media) return ack?.({ ok: false, error: { message: 'Media not found' } });
 
-      const durationSeconds = 10;
-      await updateState({ activePoster: media._id, layout: 'countdown', pendingUnveil: true });
-      const state = await updateCountdown({
-        durationSeconds,
-        remainingSeconds: durationSeconds,
+      const requested = Number(durationSeconds);
+      // Clamp to a sane range rather than trusting the client outright — 5
+      // minutes is far more than a "reveal countdown" should ever need.
+      const duration = Number.isFinite(requested) && requested > 0 ? Math.min(Math.round(requested), 300) : 10;
+
+      await updateState({ activePoster: media._id, layout: 'poster_unveil' });
+      const state = await updatePosterUnveilCountdown({
+        durationSeconds: duration,
+        remainingSeconds: duration,
         status: 'running',
-        startedAt: new Date(),
       });
       io.emit('state:update', state);
-      startTicking(io);
+      startUnveilTicking(io);
+      ack?.({ ok: true });
+    });
+
+    socket.on('control:posterUnveil:cancel', async (_payload, ack) => {
+      if (!requireAdminAck(socket, ack)) return;
+      stopUnveilTicking();
+      await updateState({ layout: 'idle' });
+      const state = await updatePosterUnveilCountdown({ status: 'stopped', remainingSeconds: 0 });
+      io.emit('state:update', state);
       ack?.({ ok: true });
     });
 
@@ -223,7 +236,6 @@ export function initSocket(io) {
     socket.on('control:countdown:reset', async (_payload, ack) => {
       if (!requireAdminAck(socket, ack)) return;
       const current = await getState();
-      await updateState({ pendingUnveil: false });
       const state = await updateCountdown({
         status: 'stopped',
         remainingSeconds: current.countdown.durationSeconds,
@@ -234,7 +246,6 @@ export function initSocket(io) {
 
     socket.on('control:countdown:stop', async (_payload, ack) => {
       if (!requireAdminAck(socket, ack)) return;
-      await updateState({ pendingUnveil: false });
       const state = await updateCountdown({ status: 'stopped', remainingSeconds: 0 });
       io.emit('state:update', state);
       ack?.({ ok: true });
@@ -244,9 +255,11 @@ export function initSocket(io) {
 
     socket.on('control:live:start', async (_payload, ack) => {
       if (!requireAdminAck(socket, ack)) return;
+      stopUnveilTicking();
+      await updatePosterUnveilCountdown({ status: 'stopped' });
       const current = await getState();
       const nextLayout = current.countdown.status !== 'stopped' ? 'countdown_live' : 'live';
-      const state = await updateState({ 'live.isLive': true, layout: nextLayout, pendingUnveil: false });
+      const state = await updateState({ 'live.isLive': true, layout: nextLayout });
       io.emit('state:update', state);
       ack?.({ ok: true });
     });
@@ -266,18 +279,31 @@ export function initSocket(io) {
     socket.on('control:presentation:close', async (_payload, ack) => {
       if (!requireAdminAck(socket, ack)) return;
       stopTicking();
+      stopUnveilTicking();
       const state = await updateState({
         layout: 'idle',
         activePoster: null,
         'live.isLive': false,
-        pendingUnveil: false,
       });
       await updateCountdown({ status: 'stopped', remainingSeconds: 0 });
+      await updatePosterUnveilCountdown({ status: 'stopped', remainingSeconds: 0 });
       const finalState = await getState();
       io.emit('state:update', finalState);
       io.emit('webrtc:stop');
       ack?.({ ok: true });
     });
+
+    // Send current state once connected. This runs last and is fire-and-
+    // forget on purpose: every socket.on(...) above must be registered
+    // synchronously, in the same tick as the 'connection' event, or a
+    // control event sent immediately after connecting can arrive before its
+    // listener exists and be silently dropped. Awaiting this DB round-trip
+    // any earlier (as this used to do, at the top of the handler) created
+    // exactly that race — invisible on a local Mongo instance's near-zero
+    // latency, but a real gap against a networked database like Atlas.
+    getState()
+      .then((state) => socket.emit('state:update', state))
+      .catch((err) => console.error('[socket] failed to send initial state:', err.message));
   });
 }
 
@@ -297,11 +323,6 @@ function startTicking(io) {
 
       if (remaining === 0) {
         stopTicking();
-        if (current.pendingUnveil) {
-          const revealState = await updateState({ layout: 'poster', pendingUnveil: false });
-          io.emit('state:update', revealState);
-          io.emit('poster:unveiled');
-        }
       }
     } catch (err) {
       console.error('[socket] countdown tick error:', err.message);
@@ -313,5 +334,40 @@ function stopTicking() {
   if (countdownInterval) {
     clearInterval(countdownInterval);
     countdownInterval = null;
+  }
+}
+
+let unveilCountdownInterval = null;
+
+function startUnveilTicking(io) {
+  if (unveilCountdownInterval) return;
+  unveilCountdownInterval = setInterval(async () => {
+    try {
+      const current = await getState();
+      if (current.posterUnveilCountdown.status !== 'running') {
+        stopUnveilTicking();
+        return;
+      }
+      const remaining = Math.max(0, current.posterUnveilCountdown.remainingSeconds - 1);
+      const status = remaining === 0 ? 'stopped' : 'running';
+      const state = await updatePosterUnveilCountdown({ remainingSeconds: remaining, status });
+      io.emit('state:update', state);
+
+      if (remaining === 0) {
+        stopUnveilTicking();
+        const revealState = await updateState({ layout: 'poster' });
+        io.emit('state:update', revealState);
+        io.emit('poster:unveiled');
+      }
+    } catch (err) {
+      console.error('[socket] poster unveil tick error:', err.message);
+    }
+  }, 1000);
+}
+
+function stopUnveilTicking() {
+  if (unveilCountdownInterval) {
+    clearInterval(unveilCountdownInterval);
+    unveilCountdownInterval = null;
   }
 }

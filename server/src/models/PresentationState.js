@@ -6,7 +6,7 @@ const presentationStateSchema = new mongoose.Schema(
 
     layout: {
       type: String,
-      enum: ['idle', 'poster', 'countdown', 'countdown_live', 'live'],
+      enum: ['idle', 'poster', 'countdown', 'countdown_live', 'live', 'poster_unveil'],
       default: 'idle',
     },
 
@@ -15,10 +15,16 @@ const presentationStateSchema = new mongoose.Schema(
 
     activePoster: { type: mongoose.Schema.Types.ObjectId, ref: 'Media' },
 
-    // True while a "Poster Unveil" countdown is running: when the countdown
-    // hits zero the server auto-switches layout to 'poster' and broadcasts
-    // a one-off 'poster:unveiled' event so screens can play a celebration.
-    pendingUnveil: { type: Boolean, default: false },
+    // A separate, seconds-only countdown for "Poster Unveil" — kept
+    // independent from the main event `countdown` below so starting an
+    // unveil never clobbers (or gets clobbered by) the main countdown.
+    // When it hits zero the server auto-switches layout to 'poster' and
+    // broadcasts a one-off 'poster:unveiled' event for the celebration.
+    posterUnveilCountdown: {
+      durationSeconds: { type: Number, default: 10 },
+      remainingSeconds: { type: Number, default: 0 },
+      status: { type: String, enum: ['stopped', 'running'], default: 'stopped' },
+    },
 
     countdown: {
       durationSeconds: { type: Number, default: 0 },

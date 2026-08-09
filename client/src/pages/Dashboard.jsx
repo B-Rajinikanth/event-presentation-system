@@ -124,8 +124,10 @@ export default function Dashboard() {
           <PosterUnveilControl
             state={state}
             busy={busy}
-            onStartUnveil={(mediaId) => run('control:posterUnveil:start', { mediaId })}
-            onCancel={() => run('control:countdown:stop')}
+            onStartUnveil={(mediaId, durationSeconds) =>
+              run('control:posterUnveil:start', { mediaId, durationSeconds })
+            }
+            onCancel={() => run('control:posterUnveil:cancel')}
           />
         </div>
       </main>
