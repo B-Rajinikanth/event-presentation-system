@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useAuth } from '../context/AuthContext.jsx';
 import { usePresentationSocket } from '../hooks/usePresentationSocket.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { emitControl } from '../services/controls.js';
 import Navbar from '../components/Navbar.jsx';
 import QuickControls from '../components/dashboard/QuickControls.jsx';
@@ -12,6 +13,7 @@ import EventInfoPanel from '../components/dashboard/EventInfoPanel.jsx';
 import PreviewPane from '../components/dashboard/PreviewPane.jsx';
 
 export default function Dashboard() {
+  usePageTitle('SUH Admin: Event Control Room');
   const { token } = useAuth();
   const { state, connected, socket } = usePresentationSocket('admin', token);
   const [busy, setBusy] = useState(false);

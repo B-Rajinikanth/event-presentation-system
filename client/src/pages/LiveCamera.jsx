@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePresentationSocket } from '../hooks/usePresentationSocket.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { RTC_CONFIG } from '../services/webrtcConfig.js';
 
 export default function LiveCamera() {
+  usePageTitle('SUH Camera: Live Casting');
   const { connected, socket } = usePresentationSocket('camera');
   const localVideoRef = useRef(null);
   const localStreamRef = useRef(null);

@@ -81,7 +81,7 @@ export default function PreviewPane() {
         )}
 
         {showUnveilCountdown && (
-          <div className="relative flex h-full w-full flex-col items-center justify-center gap-1 bg-black/30">
+          <div className="relative flex h-full w-full flex-col items-center justify-center gap-1">
             <span className="text-[0.55rem] font-semibold uppercase tracking-[0.3em] text-emerald-300">
               Unveiling In
             </span>

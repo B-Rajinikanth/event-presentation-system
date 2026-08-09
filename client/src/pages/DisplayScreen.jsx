@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePresentationSocket } from '../hooks/usePresentationSocket.js';
+import { usePageTitle } from '../hooks/usePageTitle.js';
 import { RTC_CONFIG } from '../services/webrtcConfig.js';
 import { API_BASE_URL } from '../services/apiBase.js';
 import CountdownDisplay from '../components/CountdownDisplay.jsx';
@@ -9,6 +10,7 @@ import Confetti from '../components/Confetti.jsx';
 const CELEBRATION_DURATION_MS = 4000;
 
 export default function DisplayScreen() {
+  usePageTitle('SUH Event: Display Live');
   const { state, socket } = usePresentationSocket('display');
   const videoRef = useRef(null);
   const pcRef = useRef(null);
@@ -233,7 +235,7 @@ export default function DisplayScreen() {
       )}
 
       {showUnveilCountdown && (
-        <div className="relative flex h-full w-full flex-col items-center justify-center gap-6 bg-black/30">
+        <div className="relative flex h-full w-full flex-col items-center justify-center gap-6">
           <span className="text-sm font-semibold uppercase tracking-[0.5em] text-emerald-300 drop-shadow-[0_0_0.6em_rgba(52,211,153,0.6)] sm:text-lg">
             Unveiling In
           </span>
