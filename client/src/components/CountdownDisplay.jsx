@@ -1,5 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
-
 function formatParts(totalSeconds) {
   const s = Math.max(0, Math.floor(totalSeconds || 0));
   return {
@@ -9,53 +7,23 @@ function formatParts(totalSeconds) {
   };
 }
 
-// A real two-face flip card: the front face holds the outgoing digit, the
-// back face is pre-rotated 180° and holds the incoming digit. Rotating the
-// card -180° around the horizontal axis reveals the back face right-side up
-// exactly as the front face turns away — a proper top-to-bottom cube flip,
-// not just a spin of unchanged content. Only fires when this digit's value
-// actually changes.
+// key={char} remounts a fresh span whenever the digit changes, which
+// restarts the CSS fade-in animation (.animate-digit-fade, shared with the
+// Poster Unveil countdown) on its own — no flip state/timers needed for a
+// plain smooth transition.
 function DigitTile({ char, urgent }) {
-  const [displayed, setDisplayed] = useState(char);
-  const [incoming, setIncoming] = useState(null);
-  const prevChar = useRef(char);
-
-  useEffect(() => {
-    if (prevChar.current === char) return;
-    prevChar.current = char;
-    setIncoming(char);
-
-    const timeout = setTimeout(() => {
-      setDisplayed(char);
-      setIncoming(null);
-    }, 600);
-
-    return () => clearTimeout(timeout);
-  }, [char]);
-
-  const flipping = incoming !== null;
-
   return (
     <span
-      className={`relative inline-flex items-center justify-center rounded-[0.16em] px-[0.16em] py-[0.05em] shadow-[0_0.08em_0.2em_rgba(0,0,0,0.35)] [perspective:320px] ${
+      className={`relative inline-flex items-center justify-center overflow-hidden rounded-[0.16em] px-[0.16em] py-[0.05em] shadow-[0_0.08em_0.2em_rgba(0,0,0,0.35)] ${
         urgent ? 'animate-urgent-glow bg-red-600' : 'bg-white'
       }`}
     >
       <span
-        className={`relative inline-block [transform-style:preserve-3d] ${
-          flipping ? 'animate-flip-card' : ''
-        } ${urgent ? 'text-white' : 'text-slate-900'}`}
+        key={char}
+        className={`animate-digit-fade inline-block ${urgent ? 'text-white' : 'text-slate-900'}`}
       >
-        <span className="inline-block [backface-visibility:hidden]">{displayed}</span>
-        {flipping && (
-          <span className="absolute inset-0 flex items-center justify-center [backface-visibility:hidden] [transform:rotateX(180deg)]">
-            {incoming}
-          </span>
-        )}
+        {char}
       </span>
-      {flipping && (
-        <span className="animate-flip-shadow pointer-events-none absolute inset-0 rounded-[0.16em] bg-black" />
-      )}
     </span>
   );
 }
