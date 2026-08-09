@@ -6,6 +6,7 @@ import { API_BASE_URL } from '../services/apiBase.js';
 import CountdownDisplay from '../components/CountdownDisplay.jsx';
 import PosterUnveilCountdown from '../components/PosterUnveilCountdown.jsx';
 import Confetti from '../components/Confetti.jsx';
+import { unlockAudio, playUnveilTick, playUnveilReveal } from '../services/sound.js';
 
 const CELEBRATION_DURATION_MS = 4000;
 
@@ -65,6 +66,7 @@ export default function DisplayScreen() {
     function handleUnveiled() {
       setCelebrateKey((k) => k + 1);
       setCelebrating(true);
+      playUnveilReveal();
       const timeout = setTimeout(() => setCelebrating(false), CELEBRATION_DURATION_MS);
       return timeout;
     }
@@ -81,6 +83,26 @@ export default function DisplayScreen() {
       socket.off('poster:unveiled', onUnveiled);
     };
   }, [socket]);
+
+  // Poster Unveil: a tick for each of the final 10 seconds (not the whole
+  // duration — a tick every second for a 90s+ countdown would just be
+  // noise), pitching up for the last 3. Only fires on an actual decrement,
+  // tracked via a ref, so a fresh countdown starting at a higher value than
+  // wherever the last one ended doesn't play a spurious tick.
+  const prevUnveilRemainingRef = useRef(null);
+  useEffect(() => {
+    if (!showUnveilCountdown) {
+      prevUnveilRemainingRef.current = null;
+      return;
+    }
+    const unveilRemaining = state?.posterUnveilCountdown?.remainingSeconds;
+    if (typeof unveilRemaining !== 'number') return;
+    const prev = prevUnveilRemainingRef.current;
+    prevUnveilRemainingRef.current = unveilRemaining;
+    if (prev !== null && unveilRemaining < prev && unveilRemaining > 0 && unveilRemaining <= 10) {
+      playUnveilTick(unveilRemaining <= 3);
+    }
+  }, [showUnveilCountdown, state?.posterUnveilCountdown?.remainingSeconds]);
 
   useEffect(() => {
     if (!socket) return;
@@ -152,11 +174,13 @@ export default function DisplayScreen() {
 
   function enableInteractionAndFullscreen() {
     setNeedsInteraction(false);
+    unlockAudio();
     videoRef.current?.play().catch(() => {});
     document.documentElement.requestFullscreen?.().catch(() => {});
   }
 
   function toggleFullscreen() {
+    unlockAudio();
     if (document.fullscreenElement) {
       document.exitFullscreen?.();
     } else {
