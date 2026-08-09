@@ -132,6 +132,25 @@ body {
   -webkit-text-fill-color: transparent;
 }
 
+/* A plain smooth transition between countdown values — replaces the earlier
+   3D flip-card effect. Triggered by React remounting a fresh element on
+   each value change (key={value}), which restarts this animation without
+   needing any flip state/timers. */
+@keyframes digit-fade {
+  from {
+    opacity: 0;
+    transform: translateY(0.06em);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-digit-fade {
+  animation: digit-fade 0.35s ease-out;
+}
+
 @keyframes neon-pulse {
   0%,
   100% {

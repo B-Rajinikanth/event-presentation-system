@@ -1,58 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
-
-// Flips the whole number as one glyph rather than per-character tiles: an
-// unveil duration is seconds-only and short, so it commonly crosses a
-// digit-count boundary (10 -> 9) where fixed per-character slots would
-// misalign. A single flipping unit sidesteps that entirely. Same two-face
-// flip technique as CountdownDisplay's DigitTile (see index.css
-// .animate-flip-card) — only the value that actually changes flips.
-function FlipNumber({ value }) {
-  const [displayed, setDisplayed] = useState(value);
-  const [incoming, setIncoming] = useState(null);
-  const prevValue = useRef(value);
-
-  useEffect(() => {
-    if (prevValue.current === value) return;
-    prevValue.current = value;
-    setIncoming(value);
-
-    const timeout = setTimeout(() => {
-      setDisplayed(value);
-      setIncoming(null);
-    }, 600);
-
-    return () => clearTimeout(timeout);
-  }, [value]);
-
-  const flipping = incoming !== null;
-
-  return (
-    <span className="relative inline-block [perspective:600px]">
-      <span
-        className={`relative inline-block [transform-style:preserve-3d] ${
-          flipping ? 'animate-flip-card' : ''
-        }`}
-      >
-        {/* The gradient/glow class must live on the element that directly
-            wraps the digit text — background-clip: text clips to *this*
-            element's own text content, not a descendant's. Putting it on
-            the flip wrapper above (which has no text of its own) meant the
-            gradient fill never actually applied; only the blurred
-            text-shadow copies were visible, which is what read as "blurry"
-            digits with no crisp fill underneath. */}
-        <span className="poster-unveil-neon-digit inline-block [backface-visibility:hidden]">
-          {displayed}
-        </span>
-        {flipping && (
-          <span className="poster-unveil-neon-digit absolute inset-0 flex items-center justify-center [backface-visibility:hidden] [transform:rotateX(180deg)]">
-            {incoming}
-          </span>
-        )}
-      </span>
-    </span>
-  );
-}
-
 export default function PosterUnveilCountdown({ seconds, size = 'text-[8rem] sm:text-[13rem] md:text-[17rem]' }) {
   const value = String(Math.max(0, Math.floor(seconds || 0)));
 
@@ -61,7 +6,12 @@ export default function PosterUnveilCountdown({ seconds, size = 'text-[8rem] sm:
       <span className="poster-unveil-ring-glow pointer-events-none absolute h-[1.9em] w-[1.9em] rounded-full" aria-hidden="true" />
       <span className="poster-unveil-ring-spin pointer-events-none absolute h-[1.9em] w-[1.9em] rounded-full" aria-hidden="true" />
       <span className="relative font-mono font-black leading-none">
-        <FlipNumber value={value} />
+        {/* key={value} remounts a fresh span on every change, which
+            restarts the CSS fade-in animation automatically — no flip
+            state/timers needed for a plain smooth transition. */}
+        <span key={value} className="poster-unveil-neon-digit animate-digit-fade inline-block">
+          {value}
+        </span>
       </span>
     </div>
   );
