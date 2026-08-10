@@ -9,6 +9,7 @@ import EventsPage from './pages/EventsPage.jsx';
 import MediaLibraryPage from './pages/MediaLibraryPage.jsx';
 import DisplayScreen from './pages/DisplayScreen.jsx';
 import LiveCamera from './pages/LiveCamera.jsx';
+import SuperAdminPage from './pages/SuperAdminPage.jsx';
 
 export default function App() {
   return (
@@ -40,6 +41,14 @@ export default function App() {
               element={
                 <ProtectedRoute>
                   <MediaLibraryPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/superadmin"
+              element={
+                <ProtectedRoute role="superadmin">
+                  <SuperAdminPage />
                 </ProtectedRoute>
               }
             />

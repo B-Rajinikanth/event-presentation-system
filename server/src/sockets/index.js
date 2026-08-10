@@ -3,12 +3,16 @@ import { getState, updateState, updateCountdown, updatePosterUnveilCountdown } f
 import Event from '../models/Event.js';
 import SubEvent from '../models/SubEvent.js';
 import Media from '../models/Media.js';
+import User from '../models/User.js';
 import { startOtpRotation, getOtpSnapshot } from '../services/otp.js';
 
 let countdownInterval = null;
 
+// superadmin is a superset of admin: it can additionally manage admin
+// accounts (see routes/admins.routes.js), but has the same room-control
+// capability and is subject to the same single-controller exclusivity.
 function isAdmin(socket) {
-  return socket.data.user?.role === 'admin';
+  return ['admin', 'superadmin'].includes(socket.data.user?.role);
 }
 
 function requireAdminAck(socket, ack) {
@@ -29,6 +33,7 @@ export function initSocket(io) {
     displaySocketIds: new Set(),
     cameraSocketId: null,
     adminSocketId: null,
+    adminUser: null,
     displaysLocked: false,
   };
 
@@ -53,19 +58,27 @@ export function initSocket(io) {
   // socket.data.user is already set for the admin check. Rejecting here
   // (via next(new Error(...))) fails the handshake itself: the client gets
   // a 'connect_error' and never becomes a full connection, so nothing needs
-  // to be added to the registry or cleaned up on the reject path. The
-  // client (usePresentationSocket) manually retries every few seconds on
-  // 'connect_error', since socket.io-client's automatic reconnection does
-  // not reliably keep retrying a connection a server middleware rejected
-  // outright.
+  // to be added to the registry or cleaned up on the reject path. There is
+  // deliberately no automatic retry anywhere in this flow (client-side
+  // included) — a rejected admin/camera/display must make a fresh manual
+  // attempt, not silently reconnect once the slot frees up.
   io.use((socket, next) => {
     const role = socket.handshake.query?.role || 'viewer';
 
     if (role === 'camera' && registry.cameraSocketId) {
       return next(new Error('Another camera is already connected.'));
     }
-    if (role === 'admin' && socket.data.user?.role === 'admin' && registry.adminSocketId) {
-      return next(new Error('Another admin session is already active.'));
+    if (role === 'admin' && isAdmin(socket) && registry.adminSocketId) {
+      const controller = registry.adminUser;
+      const err = new Error(
+        controller
+          ? `${controller.name} (${controller.email}) is currently controlling the room.`
+          : 'Another admin session is already active.'
+      );
+      // Socket.IO forwards err.data to the client's connect_error handler —
+      // lets the UI show who's in control, not just a generic message.
+      err.data = { currentAdmin: controller || null };
+      return next(err);
     }
     if (role === 'display' && registry.displaysLocked) {
       return next(new Error('The admin has paused new display connections.'));
@@ -104,6 +117,18 @@ export function initSocket(io) {
       socket.join('admin');
       socket.emit('otp:update', getOtpSnapshot());
       socket.emit('displays:update', { count: registry.displaySocketIds.size, locked: registry.displaysLocked });
+      // Fire-and-forget: caches this admin's identity so a rejected
+      // duplicate admin connection can be told who's currently in control.
+      // Not needed synchronously, so it's fine that this resolves slightly
+      // after the listener registrations below.
+      User.findById(socket.data.user.id)
+        .select('name email')
+        .then((user) => {
+          if (registry.adminSocketId === socket.id) {
+            registry.adminUser = user ? { name: user.name, email: user.email } : null;
+          }
+        })
+        .catch(() => {});
     }
 
     socket.on('disconnect', () => {
@@ -122,6 +147,7 @@ export function initSocket(io) {
       }
       if (registry.adminSocketId === socket.id) {
         registry.adminSocketId = null;
+        registry.adminUser = null;
       }
     });
 

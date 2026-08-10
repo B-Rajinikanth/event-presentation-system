@@ -15,6 +15,7 @@ import eventRoutes from './routes/event.routes.js';
 import mediaRoutes from './routes/media.routes.js';
 import presentationRoutes from './routes/presentation.routes.js';
 import otpRoutes from './routes/otp.routes.js';
+import adminsRoutes from './routes/admins.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -45,6 +46,7 @@ app.use('/api/events', eventRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/presentation', presentationRoutes);
 app.use('/api/otp', otpRoutes);
+app.use('/api/admins', adminsRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

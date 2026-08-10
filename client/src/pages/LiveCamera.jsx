@@ -19,7 +19,7 @@ export default function LiveCamera() {
 
 function LiveCameraContent() {
   usePageTitle('SUH Camera: Live Casting');
-  const { connected, connectError, socket } = usePresentationSocket('camera');
+  const { connected, connectError, retry, socket } = usePresentationSocket('camera');
   const localVideoRef = useRef(null);
   const localStreamRef = useRef(null);
 
@@ -189,13 +189,19 @@ function LiveCameraContent() {
   }[status];
 
   // The server rejects a second camera connection outright (see sockets/
-  // index.js) — clears itself automatically once the other session ends.
+  // index.js). Deliberately no auto-reconnect — requires an explicit retry.
   if (connectError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 p-6 text-center">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-center">
         <h1 className="text-xl font-bold text-white">Camera Unavailable</h1>
         <p className="max-w-sm text-sm text-slate-400">{connectError}</p>
-        <p className="text-xs text-slate-500">This page will connect automatically once the other session ends.</p>
+        <p className="text-xs text-slate-500">This page will not reconnect on its own.</p>
+        <button
+          onClick={retry}
+          className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-500"
+        >
+          Try Again
+        </button>
       </div>
     );
   }

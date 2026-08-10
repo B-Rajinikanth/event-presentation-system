@@ -28,7 +28,7 @@ export default function DisplayScreen() {
 
 function DisplayScreenContent() {
   usePageTitle('SUH Event: Display Live');
-  const { state, socket, connectError } = usePresentationSocket('display');
+  const { state, socket, connectError, retry } = usePresentationSocket('display');
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const cameraSocketIdRef = useRef(null);
@@ -229,10 +229,16 @@ function DisplayScreenContent() {
   // like a dead black screen with no explanation.
   if (connectError) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-black p-6 text-center text-white">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black p-6 text-center text-white">
         <h1 className="text-xl font-bold">Display Unavailable</h1>
         <p className="max-w-sm text-sm text-slate-400">{connectError}</p>
-        <p className="text-xs text-slate-500">This screen will connect automatically once it's allowed.</p>
+        <p className="text-xs text-slate-500">This screen will not reconnect on its own.</p>
+        <button
+          onClick={retry}
+          className="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+        >
+          Try Again
+        </button>
       </div>
     );
   }

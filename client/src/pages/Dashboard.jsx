@@ -17,7 +17,10 @@ import DisplayConnectionsPanel from '../components/dashboard/DisplayConnectionsP
 export default function Dashboard() {
   usePageTitle('SUH Admin: Event Control Room');
   const { token } = useAuth();
-  const { state, connected, otp, displays, connectError, socket } = usePresentationSocket('admin', token);
+  const { state, connected, otp, displays, connectError, connectErrorData, retry, socket } = usePresentationSocket(
+    'admin',
+    token
+  );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -61,17 +64,29 @@ export default function Dashboard() {
   );
 
   // The server rejects a second admin connection outright (see sockets/
-  // index.js) — this only renders while that's the case, and clears itself
-  // automatically once the other session ends and the underlying socket's
-  // automatic reconnect succeeds.
+  // index.js). Deliberately no auto-reconnect — the admin has to notice,
+  // ask the other person to log out, and explicitly retry.
   if (connectError) {
+    const controller = connectErrorData?.currentAdmin;
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-100 p-6 text-center dark:bg-slate-950">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-100 p-6 text-center dark:bg-slate-950">
         <h1 className="text-xl font-bold text-slate-900 dark:text-white">Admin Session Unavailable</h1>
         <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">{connectError}</p>
+        {controller && (
+          <div className="rounded-lg border border-slate-300 bg-white px-4 py-2 dark:border-slate-700 dark:bg-slate-900">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white">{controller.name}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400">{controller.email}</p>
+          </div>
+        )}
         <p className="text-xs text-slate-400 dark:text-slate-500">
-          This page will connect automatically once the other session ends.
+          Ask them to log out, then try again — this page will not reconnect on its own.
         </p>
+        <button
+          onClick={retry}
+          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+        >
+          Try Again
+        </button>
       </div>
     );
   }

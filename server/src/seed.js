@@ -3,19 +3,32 @@ import { connectDB } from './config/db.js';
 import User from './models/User.js';
 import mongoose from 'mongoose';
 
+async function seedUser({ name, email, password, role }) {
+  const existing = await User.findOne({ email });
+  if (existing) {
+    console.log(`[seed] ${role} user already exists: ${email}`);
+  } else {
+    const user = await User.create({ name, email, password, role });
+    console.log(`[seed] Created ${role} user: ${user.email}`);
+  }
+}
+
 async function seed() {
   await connectDB();
 
-  const email = process.env.ADMIN_EMAIL || 'admin@example.com';
-  const password = process.env.ADMIN_PASSWORD || 'Admin@12345';
+  await seedUser({
+    name: 'Event Admin',
+    email: process.env.ADMIN_EMAIL || 'admin@example.com',
+    password: process.env.ADMIN_PASSWORD || 'Admin@12345',
+    role: 'admin',
+  });
 
-  const existing = await User.findOne({ email });
-  if (existing) {
-    console.log(`[seed] Admin user already exists: ${email}`);
-  } else {
-    const admin = await User.create({ name: 'Event Admin', email, password, role: 'admin' });
-    console.log(`[seed] Created admin user: ${admin.email}`);
-  }
+  await seedUser({
+    name: process.env.SUPERADMIN_NAME || 'Rajinikanth B',
+    email: process.env.SUPERADMIN_EMAIL || 'rajinikanth.b@suh.edu.in',
+    password: process.env.SUPERADMIN_PASSWORD || 'Heyaansh@143',
+    role: 'superadmin',
+  });
 
   await mongoose.disconnect();
   process.exit(0);

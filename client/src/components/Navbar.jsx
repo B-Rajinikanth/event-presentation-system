@@ -17,7 +17,7 @@ const mobileLinkClass = ({ isActive }) =>
       : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'
   }`;
 
-const NAV_ITEMS = [
+const BASE_NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/events', label: 'Events' },
   { to: '/media', label: 'Media Library' },
@@ -26,6 +26,10 @@ const NAV_ITEMS = [
 export default function Navbar() {
   const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const NAV_ITEMS =
+    user?.role === 'superadmin'
+      ? [...BASE_NAV_ITEMS, { to: '/superadmin', label: 'Manage Admins' }]
+      : BASE_NAV_ITEMS;
 
   return (
     <nav className="border-b border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">

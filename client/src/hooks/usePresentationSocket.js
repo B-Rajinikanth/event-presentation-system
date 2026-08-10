@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { createSocket } from '../services/socket.js';
 
 export function usePresentationSocket(role, token) {
@@ -7,30 +7,29 @@ export function usePresentationSocket(role, token) {
   const [otp, setOtp] = useState(null);
   const [displays, setDisplays] = useState(null);
   const [connectError, setConnectError] = useState(null);
+  const [connectErrorData, setConnectErrorData] = useState(null);
+  const [retryCount, setRetryCount] = useState(0);
   const socketRef = useRef(null);
 
   useEffect(() => {
     const socket = createSocket({ role, token });
     socketRef.current = socket;
-    let retryTimeout;
 
     socket.on('connect', () => {
       setConnected(true);
       setConnectError(null);
+      setConnectErrorData(null);
     });
     socket.on('disconnect', () => setConnected(false));
-    // The server rejects a second admin/camera (or a display while paused)
-    // by failing the handshake itself (io.use -> next(new Error(...))).
-    // socket.io-client's automatic reconnection is built for recovering a
-    // connection that dropped *after* connecting — it does not reliably
-    // keep retrying a connection that a server-side middleware rejected
-    // outright (verified: only one attempt was ever made, no backoff
-    // loop), so retry manually. socket.connect() is safe to call again on
-    // an already-created socket.
+    // The server rejects a duplicate admin/camera (or a display while
+    // paused) by failing the handshake itself (io.use -> next(new
+    // Error(...))). Deliberately no auto-retry here — a rejected connection
+    // stays rejected until the user explicitly asks for a fresh attempt via
+    // retry() below, which opens a genuinely new socket rather than
+    // resurrecting this one.
     socket.on('connect_error', (err) => {
       setConnectError(err.message);
-      clearTimeout(retryTimeout);
-      retryTimeout = setTimeout(() => socket.connect(), 3000);
+      setConnectErrorData(err.data || null);
     });
     socket.on('state:update', (nextState) => setState(nextState));
     // Registered synchronously here (not in a component further down the
@@ -42,12 +41,17 @@ export function usePresentationSocket(role, token) {
     socket.on('displays:update', (nextDisplays) => setDisplays(nextDisplays));
 
     return () => {
-      clearTimeout(retryTimeout);
       socket.disconnect();
       if (socketRef.current === socket) socketRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role, token]);
+  }, [role, token, retryCount]);
 
-  return { state, connected, otp, displays, connectError, socket: socketRef.current };
+  // Bumping retryCount re-runs the effect above, whose cleanup disconnects
+  // the rejected socket and createSocket(...) opens a brand new one — a
+  // fresh connection attempt with a new session, not a resurrection of the
+  // old rejected one.
+  const retry = useCallback(() => setRetryCount((c) => c + 1), []);
+
+  return { state, connected, otp, displays, connectError, connectErrorData, retry, socket: socketRef.current };
 }
