@@ -39,6 +39,7 @@ function DisplayScreenContent() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [celebrateKey, setCelebrateKey] = useState(0);
   const [celebrating, setCelebrating] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
 
   const layout = state?.layout ?? 'idle';
   const showPoster = layout === 'poster' && state?.activePoster;
@@ -51,12 +52,23 @@ function DisplayScreenContent() {
   const attachAndPlay = useCallback((stream) => {
     if (!videoRef.current) return;
     videoRef.current.srcObject = stream;
+    // Always attach muted: browsers never block autoplay of muted video, but
+    // do block unmuted autoplay without a prior user gesture on the page —
+    // and /display is meant to run unattended, so there's usually no one
+    // there to click anything when "Live" starts. Audio can be turned on
+    // afterwards with the mute toggle, which is itself a user gesture.
+    videoRef.current.muted = true;
     videoRef.current.play().catch(() => {
-      // Browsers block autoplay of unmuted video without a user gesture.
-      // Surface a tap-to-enable overlay instead of silently failing.
+      // Fallback for the rare browser that still blocks even muted autoplay.
       setNeedsInteraction(true);
     });
   }, []);
+
+  function toggleMute() {
+    if (!videoRef.current) return;
+    videoRef.current.muted = !videoRef.current.muted;
+    setIsMuted(videoRef.current.muted);
+  }
 
   // Re-attach the already-received stream once the <video> element mounts
   // (it only mounts when showLive becomes true, which can happen after the track arrives).
@@ -265,10 +277,16 @@ function DisplayScreenContent() {
             <div
               className={`relative bg-slate-900/60 ${splitLive ? 'h-1/2 w-full sm:h-full sm:w-1/2' : 'h-full w-full'}`}
             >
-              <video ref={videoRef} playsInline className="h-full w-full object-cover" />
+              <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
               <span className="absolute left-4 top-4 flex items-center gap-2 rounded bg-red-600/90 px-3 py-1 text-sm font-bold uppercase text-white">
                 ● Live
               </span>
+              <button
+                onClick={toggleMute}
+                className="absolute bottom-4 right-4 rounded-lg border border-white/20 bg-black/50 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur hover:bg-black/70"
+              >
+                {isMuted ? 'Unmute' : 'Mute'}
+              </button>
             </div>
           )}
         </div>
