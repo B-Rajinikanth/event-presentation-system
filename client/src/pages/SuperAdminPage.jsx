@@ -5,6 +5,7 @@ import { usePageTitle } from '../hooks/usePageTitle.js';
 import { useIdleLogout } from '../hooks/useIdleLogout.js';
 import api from '../services/api.js';
 import Navbar from '../components/Navbar.jsx';
+import Modal from '../components/Modal.jsx';
 
 const IDLE_LOGOUT_MS = 5 * 60 * 1000;
 
@@ -26,6 +27,8 @@ export default function SuperAdminPage() {
   const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', email: '', password: '' });
   const [submitting, setSubmitting] = useState(false);
+  const [showAddAdmin, setShowAddAdmin] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   const [resetPasswordFor, setResetPasswordFor] = useState(null);
   const [resetPasswordValue, setResetPasswordValue] = useState('');
@@ -51,6 +54,12 @@ export default function SuperAdminPage() {
     loadAdmins();
   }, []);
 
+  function openAddAdmin() {
+    setError('');
+    setForm({ name: '', email: '', password: '' });
+    setShowAddAdmin(true);
+  }
+
   async function handleCreate(e) {
     e.preventDefault();
     setError('');
@@ -58,6 +67,7 @@ export default function SuperAdminPage() {
     try {
       await api.post('/admins', form);
       setForm({ name: '', email: '', password: '' });
+      setShowAddAdmin(false);
       await loadAdmins();
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to create admin');
@@ -116,6 +126,13 @@ export default function SuperAdminPage() {
     }
   }
 
+  function openChangePassword() {
+    setPwError('');
+    setPwSuccess('');
+    setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setShowChangePassword(true);
+  }
+
   async function handleChangeMyPassword(e) {
     e.preventDefault();
     setPwError('');
@@ -137,6 +154,7 @@ export default function SuperAdminPage() {
       updateSession(data.token, data.user);
       setPwForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
       setPwSuccess('Password changed.');
+      setTimeout(() => setShowChangePassword(false), 900);
     } catch (err) {
       setPwError(err.response?.data?.message || 'Failed to change password');
     } finally {
@@ -170,18 +188,30 @@ export default function SuperAdminPage() {
           </div>
         )}
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            My Account
-          </h2>
-          <form onSubmit={handleChangeMyPassword} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="flex flex-wrap gap-3">
+          <button
+            onClick={openAddAdmin}
+            className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+          >
+            + Add Admin
+          </button>
+          <button
+            onClick={openChangePassword}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
+          >
+            Change My Password
+          </button>
+        </div>
+
+        <Modal open={showChangePassword} onClose={() => setShowChangePassword(false)} title="Change My Password">
+          <form onSubmit={handleChangeMyPassword} className="space-y-3">
             <input
               type="password"
               placeholder="Current password"
               required
               value={pwForm.currentPassword}
               onChange={(e) => setPwForm({ ...pwForm, currentPassword: e.target.value })}
-              className={inputClass}
+              className={`${inputClass} w-full`}
             />
             <input
               type="password"
@@ -190,7 +220,7 @@ export default function SuperAdminPage() {
               minLength={8}
               value={pwForm.newPassword}
               onChange={(e) => setPwForm({ ...pwForm, newPassword: e.target.value })}
-              className={inputClass}
+              className={`${inputClass} w-full`}
             />
             <input
               type="password"
@@ -199,32 +229,29 @@ export default function SuperAdminPage() {
               minLength={8}
               value={pwForm.confirmPassword}
               onChange={(e) => setPwForm({ ...pwForm, confirmPassword: e.target.value })}
-              className={inputClass}
+              className={`${inputClass} w-full`}
             />
-            {pwError && <p className="text-sm text-rose-500 sm:col-span-3">{pwError}</p>}
-            {pwSuccess && <p className="text-sm text-emerald-600 dark:text-emerald-400 sm:col-span-3">{pwSuccess}</p>}
+            {pwError && <p className="text-sm text-rose-500">{pwError}</p>}
+            {pwSuccess && <p className="text-sm text-emerald-600 dark:text-emerald-400">{pwSuccess}</p>}
             <button
               type="submit"
               disabled={pwSubmitting}
-              className="rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40 sm:col-span-3"
+              className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
             >
               {pwSubmitting ? 'Changing...' : 'Change My Password'}
             </button>
           </form>
-        </section>
+        </Modal>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
-          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Add Admin
-          </h2>
-          <form onSubmit={handleCreate} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <Modal open={showAddAdmin} onClose={() => setShowAddAdmin(false)} title="Add Admin">
+          <form onSubmit={handleCreate} className="space-y-3">
             <input
               type="text"
               placeholder="Name"
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className={inputClass}
+              className={`${inputClass} w-full`}
             />
             <input
               type="email"
@@ -232,7 +259,7 @@ export default function SuperAdminPage() {
               required
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className={inputClass}
+              className={`${inputClass} w-full`}
             />
             <input
               type="password"
@@ -241,17 +268,18 @@ export default function SuperAdminPage() {
               minLength={8}
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              className={inputClass}
+              className={`${inputClass} w-full`}
             />
+            {error && <p className="text-sm text-rose-500">{error}</p>}
             <button
               type="submit"
               disabled={submitting}
-              className="rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40 sm:col-span-3"
+              className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-40"
             >
-              Add Admin
+              {submitting ? 'Adding...' : 'Add Admin'}
             </button>
           </form>
-        </section>
+        </Modal>
 
         <section className="rounded-2xl border border-slate-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-900">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">

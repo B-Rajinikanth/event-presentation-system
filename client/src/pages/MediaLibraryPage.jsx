@@ -139,13 +139,25 @@ export default function MediaLibraryPage() {
                   </option>
                 ))}
               </select>
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 16V4m0 0l-4 4m4-4l4 4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" />
+                </svg>
+                Choose File
+              </button>
               <input
                 ref={fileInputRef}
                 type="file"
                 accept="image/jpeg,image/jpg,image/png,image/webp"
                 onChange={handleUpload}
                 disabled={uploading}
-                className="text-sm text-slate-600 dark:text-slate-300"
+                className="hidden"
               />
               {uploading && <span className="text-sm text-slate-500">Uploading...</span>}
             </div>

@@ -177,14 +177,6 @@ export default function Dashboard() {
             }
           />
 
-          <PreviewPane />
-
-          <LayoutControl
-            layout={state?.layout}
-            busy={busy}
-            onChange={(layout) => run('control:layout:set', { layout })}
-          />
-
           <PosterControl
             state={state}
             busy={busy}
@@ -199,6 +191,15 @@ export default function Dashboard() {
               run('control:posterUnveil:start', { mediaId, durationSeconds })
             }
             onCancel={() => run('control:posterUnveil:cancel')}
+          />
+
+          {/* Kept last so Preview + Layout land in the grid's final row. */}
+          <PreviewPane />
+
+          <LayoutControl
+            layout={state?.layout}
+            busy={busy}
+            onChange={(layout) => run('control:layout:set', { layout })}
           />
         </div>
       </main>
