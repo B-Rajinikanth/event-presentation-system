@@ -12,7 +12,8 @@ export default function CountdownControl({
   const [hours, setHours] = useState(0);
   const [minutes, setMinutes] = useState(5);
   const [seconds, setSeconds] = useState(0);
-  const [alertSeconds, setAlertSeconds] = useState(countdown?.alertThresholdSeconds ?? 10);
+  const [alertMinutes, setAlertMinutes] = useState(Math.floor((countdown?.alertThresholdSeconds ?? 10) / 60));
+  const [alertSeconds, setAlertSeconds] = useState((countdown?.alertThresholdSeconds ?? 10) % 60);
 
   const status = countdown?.status ?? 'stopped';
   const remaining = countdown?.remainingSeconds ?? 0;
@@ -89,9 +90,19 @@ export default function CountdownControl({
           Red alert at last
         </label>
         <input
+          id="alert-threshold-min"
+          type="number"
+          min="0"
+          value={alertMinutes}
+          onChange={(e) => setAlertMinutes(Number(e.target.value))}
+          className="w-14 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
+        />
+        <span className="text-xs text-slate-500 dark:text-slate-400">min</span>
+        <input
           id="alert-threshold"
           type="number"
           min="0"
+          max="59"
           value={alertSeconds}
           onChange={(e) => setAlertSeconds(Number(e.target.value))}
           className="w-16 rounded-lg border border-slate-300 bg-white px-2 py-1.5 text-center text-slate-900 dark:border-slate-700 dark:bg-slate-950 dark:text-white"
@@ -99,7 +110,7 @@ export default function CountdownControl({
         <span className="text-xs text-slate-500 dark:text-slate-400">sec</span>
         <button
           disabled={busy}
-          onClick={() => onSetAlertThreshold(alertSeconds)}
+          onClick={() => onSetAlertThreshold(alertMinutes * 60 + alertSeconds)}
           className="rounded-lg bg-slate-200 px-3 py-1.5 text-sm font-medium text-slate-800 hover:bg-slate-300 disabled:opacity-40 dark:bg-slate-700 dark:text-white dark:hover:bg-slate-600"
         >
           Set

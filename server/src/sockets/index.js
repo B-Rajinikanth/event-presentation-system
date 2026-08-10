@@ -25,7 +25,12 @@ export function initSocket(io) {
   // camera (MVP scope). The camera opens one dedicated RTCPeerConnection per
   // display, so signaling is routed point-to-point by socket id rather than
   // broadcast — each display only ever hears about its own connection.
-  const registry = { displaySocketIds: new Set(), cameraSocketId: null };
+  const registry = {
+    displaySocketIds: new Set(),
+    cameraSocketId: null,
+    adminSocketId: null,
+    displaysLocked: false,
+  };
 
   // Access-code rotation for /display and /camera: runs independently of any
   // admin action, starting the moment the server boots, so the dashboard
@@ -44,6 +49,31 @@ export function initSocket(io) {
     next();
   });
 
+  // Exclusivity / lockdown gate — runs after the middleware above so
+  // socket.data.user is already set for the admin check. Rejecting here
+  // (via next(new Error(...))) fails the handshake itself: the client gets
+  // a 'connect_error' and never becomes a full connection, so nothing needs
+  // to be added to the registry or cleaned up on the reject path. The
+  // client (usePresentationSocket) manually retries every few seconds on
+  // 'connect_error', since socket.io-client's automatic reconnection does
+  // not reliably keep retrying a connection a server middleware rejected
+  // outright.
+  io.use((socket, next) => {
+    const role = socket.handshake.query?.role || 'viewer';
+
+    if (role === 'camera' && registry.cameraSocketId) {
+      return next(new Error('Another camera is already connected.'));
+    }
+    if (role === 'admin' && socket.data.user?.role === 'admin' && registry.adminSocketId) {
+      return next(new Error('Another admin session is already active.'));
+    }
+    if (role === 'display' && registry.displaysLocked) {
+      return next(new Error('The admin has paused new display connections.'));
+    }
+
+    next();
+  });
+
   io.on('connection', (socket) => {
     const role = socket.handshake.query?.role || 'viewer';
     socket.data.role = role;
@@ -54,6 +84,7 @@ export function initSocket(io) {
       if (registry.cameraSocketId) {
         io.to(registry.cameraSocketId).emit('webrtc:display-ready', { displayId: socket.id });
       }
+      broadcastDisplaysUpdate(io, registry);
     }
 
     if (role === 'camera') {
@@ -65,12 +96,14 @@ export function initSocket(io) {
       }
     }
 
-    // The rotating access code is admin-only: joining a room (rather than
-    // tracking admin socket ids by hand) lets otp.js broadcast with a single
-    // io.to('admin').emit(...) regardless of how many admin tabs are open.
+    // The rotating access code (and display count/lock) is admin-only:
+    // joining a room lets otp.js/broadcastDisplaysUpdate push with a single
+    // io.to('admin').emit(...) rather than tracking admin ids by hand.
     if (isAdmin(socket)) {
+      registry.adminSocketId = socket.id;
       socket.join('admin');
       socket.emit('otp:update', getOtpSnapshot());
+      socket.emit('displays:update', { count: registry.displaySocketIds.size, locked: registry.displaysLocked });
     }
 
     socket.on('disconnect', () => {
@@ -79,12 +112,16 @@ export function initSocket(io) {
         if (registry.cameraSocketId) {
           io.to(registry.cameraSocketId).emit('webrtc:display-left', { displayId: socket.id });
         }
+        broadcastDisplaysUpdate(io, registry);
       }
       if (registry.cameraSocketId === socket.id) {
         registry.cameraSocketId = null;
         for (const displayId of registry.displaySocketIds) {
           io.to(displayId).emit('webrtc:camera-left');
         }
+      }
+      if (registry.adminSocketId === socket.id) {
+        registry.adminSocketId = null;
       }
     });
 
@@ -124,6 +161,16 @@ export function initSocket(io) {
       const subEvent = subEventId ? await SubEvent.findById(subEventId) : null;
       const state = await updateState({ activeSubEvent: subEvent ? subEvent._id : null });
       io.emit('state:update', state);
+      ack?.({ ok: true });
+    });
+
+    // Pausing new display connections doesn't affect displays already
+    // connected — it only changes what the io.use() gate above does with
+    // the *next* connection attempt.
+    socket.on('control:displays:setLocked', (payload, ack) => {
+      if (!requireAdminAck(socket, ack)) return;
+      registry.displaysLocked = Boolean(payload?.locked);
+      broadcastDisplaysUpdate(io, registry);
       ack?.({ ok: true });
     });
 
@@ -318,6 +365,13 @@ export function initSocket(io) {
     getState()
       .then((state) => socket.emit('state:update', state))
       .catch((err) => console.error('[socket] failed to send initial state:', err.message));
+  });
+}
+
+function broadcastDisplaysUpdate(io, registry) {
+  io.to('admin').emit('displays:update', {
+    count: registry.displaySocketIds.size,
+    locked: registry.displaysLocked,
   });
 }
 

@@ -19,7 +19,7 @@ export default function LiveCamera() {
 
 function LiveCameraContent() {
   usePageTitle('SUH Camera: Live Casting');
-  const { connected, socket } = usePresentationSocket('camera');
+  const { connected, connectError, socket } = usePresentationSocket('camera');
   const localVideoRef = useRef(null);
   const localStreamRef = useRef(null);
 
@@ -187,6 +187,18 @@ function LiveCameraContent() {
     live: liveCount > 1 ? `Live to ${liveCount} screens` : 'Live',
     error: 'Error',
   }[status];
+
+  // The server rejects a second camera connection outright (see sockets/
+  // index.js) — clears itself automatically once the other session ends.
+  if (connectError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-950 p-6 text-center">
+        <h1 className="text-xl font-bold text-white">Camera Unavailable</h1>
+        <p className="max-w-sm text-sm text-slate-400">{connectError}</p>
+        <p className="text-xs text-slate-500">This page will connect automatically once the other session ends.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-slate-950 p-6">

@@ -12,11 +12,12 @@ import LayoutControl from '../components/dashboard/LayoutControl.jsx';
 import EventInfoPanel from '../components/dashboard/EventInfoPanel.jsx';
 import PreviewPane from '../components/dashboard/PreviewPane.jsx';
 import AccessCodePanel from '../components/dashboard/AccessCodePanel.jsx';
+import DisplayConnectionsPanel from '../components/dashboard/DisplayConnectionsPanel.jsx';
 
 export default function Dashboard() {
   usePageTitle('SUH Admin: Event Control Room');
   const { token } = useAuth();
-  const { state, connected, otp, socket } = usePresentationSocket('admin', token);
+  const { state, connected, otp, displays, connectError, socket } = usePresentationSocket('admin', token);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -59,6 +60,22 @@ export default function Dashboard() {
     [run]
   );
 
+  // The server rejects a second admin connection outright (see sockets/
+  // index.js) — this only renders while that's the case, and clears itself
+  // automatically once the other session ends and the underlying socket's
+  // automatic reconnect succeeds.
+  if (connectError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-slate-100 p-6 text-center dark:bg-slate-950">
+        <h1 className="text-xl font-bold text-slate-900 dark:text-white">Admin Session Unavailable</h1>
+        <p className="max-w-sm text-sm text-slate-500 dark:text-slate-400">{connectError}</p>
+        <p className="text-xs text-slate-400 dark:text-slate-500">
+          This page will connect automatically once the other session ends.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-950">
       <Navbar />
@@ -92,6 +109,12 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           <AccessCodePanel otp={otp} />
+
+          <DisplayConnectionsPanel
+            displays={displays}
+            busy={busy}
+            onSetLocked={(locked) => run('control:displays:setLocked', { locked })}
+          />
 
           <EventInfoPanel
             state={state}

@@ -28,7 +28,7 @@ export default function DisplayScreen() {
 
 function DisplayScreenContent() {
   usePageTitle('SUH Event: Display Live');
-  const { state, socket } = usePresentationSocket('display');
+  const { state, socket, connectError } = usePresentationSocket('display');
   const videoRef = useRef(null);
   const pcRef = useRef(null);
   const cameraSocketIdRef = useRef(null);
@@ -222,6 +222,20 @@ function DisplayScreenContent() {
   const isUrgent = countdownRunning && remaining <= alertThreshold && remaining > 0;
   const eventTitle = state?.event?.displayTitle || state?.event?.name;
   const subEventTitle = state?.activeSubEvent?.displayTitle || state?.activeSubEvent?.title;
+
+  // Passing the OTP gate only proves the code was right — the server can
+  // still reject the actual socket connection (e.g. the admin has paused
+  // new display connections). Without this, a blocked screen just looks
+  // like a dead black screen with no explanation.
+  if (connectError) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-black p-6 text-center text-white">
+        <h1 className="text-xl font-bold">Display Unavailable</h1>
+        <p className="max-w-sm text-sm text-slate-400">{connectError}</p>
+        <p className="text-xs text-slate-500">This screen will connect automatically once it's allowed.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-black">
