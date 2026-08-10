@@ -2,8 +2,22 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { usePresentationSocket } from '../hooks/usePresentationSocket.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
 import { RTC_CONFIG } from '../services/webrtcConfig.js';
+import AccessGate, { isGateUnlocked } from '../components/AccessGate.jsx';
 
+// Same reasoning as DisplayScreen: the gate has to wrap the whole page
+// rather than live inside it, since usePresentationSocket can't be
+// conditionally skipped once the component starts using hooks.
 export default function LiveCamera() {
+  const [unlocked, setUnlocked] = useState(() => isGateUnlocked('camera'));
+
+  if (!unlocked) {
+    return <AccessGate gateId="camera" title="Live Camera" onUnlocked={() => setUnlocked(true)} />;
+  }
+
+  return <LiveCameraContent />;
+}
+
+function LiveCameraContent() {
   usePageTitle('SUH Camera: Live Casting');
   const { connected, socket } = usePresentationSocket('camera');
   const localVideoRef = useRef(null);

@@ -14,10 +14,15 @@ import authRoutes from './routes/auth.routes.js';
 import eventRoutes from './routes/event.routes.js';
 import mediaRoutes from './routes/media.routes.js';
 import presentationRoutes from './routes/presentation.routes.js';
+import otpRoutes from './routes/otp.routes.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
+// Render (and most hosts) put the app behind a reverse proxy — without this,
+// req.ip resolves to the proxy's address for every request, which would
+// collapse the OTP rate-limiter's per-IP buckets into one shared bucket.
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 // Reflect the request origin instead of a fixed one: the Live Camera page is
@@ -39,6 +44,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/events', eventRoutes);
 app.use('/api/media', mediaRoutes);
 app.use('/api/presentation', presentationRoutes);
+app.use('/api/otp', otpRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

@@ -11,11 +11,12 @@ import PosterUnveilControl from '../components/dashboard/PosterUnveilControl.jsx
 import LayoutControl from '../components/dashboard/LayoutControl.jsx';
 import EventInfoPanel from '../components/dashboard/EventInfoPanel.jsx';
 import PreviewPane from '../components/dashboard/PreviewPane.jsx';
+import AccessCodePanel from '../components/dashboard/AccessCodePanel.jsx';
 
 export default function Dashboard() {
   usePageTitle('SUH Admin: Event Control Room');
   const { token } = useAuth();
-  const { state, connected, socket } = usePresentationSocket('admin', token);
+  const { state, connected, otp, socket } = usePresentationSocket('admin', token);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -90,6 +91,8 @@ export default function Dashboard() {
         </section>
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <AccessCodePanel otp={otp} />
+
           <EventInfoPanel
             state={state}
             busy={busy}

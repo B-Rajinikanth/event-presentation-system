@@ -3,6 +3,7 @@ import { getState, updateState, updateCountdown, updatePosterUnveilCountdown } f
 import Event from '../models/Event.js';
 import SubEvent from '../models/SubEvent.js';
 import Media from '../models/Media.js';
+import { startOtpRotation, getOtpSnapshot } from '../services/otp.js';
 
 let countdownInterval = null;
 
@@ -25,6 +26,11 @@ export function initSocket(io) {
   // display, so signaling is routed point-to-point by socket id rather than
   // broadcast — each display only ever hears about its own connection.
   const registry = { displaySocketIds: new Set(), cameraSocketId: null };
+
+  // Access-code rotation for /display and /camera: runs independently of any
+  // admin action, starting the moment the server boots, so the dashboard
+  // always has a current code to show.
+  startOtpRotation(io);
 
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token;
@@ -57,6 +63,14 @@ export function initSocket(io) {
       for (const displayId of registry.displaySocketIds) {
         socket.emit('webrtc:display-ready', { displayId });
       }
+    }
+
+    // The rotating access code is admin-only: joining a room (rather than
+    // tracking admin socket ids by hand) lets otp.js broadcast with a single
+    // io.to('admin').emit(...) regardless of how many admin tabs are open.
+    if (isAdmin(socket)) {
+      socket.join('admin');
+      socket.emit('otp:update', getOtpSnapshot());
     }
 
     socket.on('disconnect', () => {

@@ -7,10 +7,26 @@ import CountdownDisplay from '../components/CountdownDisplay.jsx';
 import PosterUnveilCountdown from '../components/PosterUnveilCountdown.jsx';
 import Confetti from '../components/Confetti.jsx';
 import { unlockAudio, playUnveilTick, playUnveilReveal } from '../services/sound.js';
+import AccessGate, { isGateUnlocked } from '../components/AccessGate.jsx';
 
 const CELEBRATION_DURATION_MS = 4000;
 
+// The access-code gate has to sit above everything else, including the
+// usePresentationSocket connection — the Rules of Hooks mean we can't
+// conditionally skip that hook inside one component, so the actual screen
+// lives in DisplayScreenContent and only mounts (and only then opens a
+// socket) once the code is verified.
 export default function DisplayScreen() {
+  const [unlocked, setUnlocked] = useState(() => isGateUnlocked('display'));
+
+  if (!unlocked) {
+    return <AccessGate gateId="display" title="Presentation Screen" onUnlocked={() => setUnlocked(true)} />;
+  }
+
+  return <DisplayScreenContent />;
+}
+
+function DisplayScreenContent() {
   usePageTitle('SUH Event: Display Live');
   const { state, socket } = usePresentationSocket('display');
   const videoRef = useRef(null);
