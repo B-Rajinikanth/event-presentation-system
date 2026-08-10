@@ -1,15 +1,27 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
 
 export default function Login() {
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const notice = searchParams.get('notice');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // A force-logout (see Dashboard.jsx) clears localStorage directly but
+  // deliberately skips AuthContext's own logout() to avoid a render race
+  // with the live socket effect it was navigating away from. Landing here
+  // with a notice means that happened, so reconcile AuthContext's
+  // in-memory state to match now that we're safely on a fresh page.
+  useEffect(() => {
+    if (notice) logout();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
@@ -37,6 +49,12 @@ export default function Login() {
         <p className="mb-6 text-sm text-slate-500 dark:text-slate-400">
           Admin access to the presentation control room
         </p>
+
+        {notice && (
+          <p className="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-700 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-300">
+            {notice}
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -75,6 +93,12 @@ export default function Login() {
           >
             {submitting ? 'Signing in...' : 'Sign In'}
           </button>
+
+          <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+            <Link to="/forgot-password" className="font-medium text-indigo-600 hover:underline dark:text-indigo-400">
+              Forgot password?
+            </Link>
+          </p>
         </form>
       </div>
     </div>

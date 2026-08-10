@@ -50,8 +50,18 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  // Swaps in a freshly issued token/user without a full logout — used after
+  // a self-service password change, which bumps tokenVersion server-side
+  // and would otherwise invalidate the very session that just changed it.
+  const updateSession = useCallback((newToken, newUser) => {
+    localStorage.setItem('token', newToken);
+    localStorage.setItem('user', JSON.stringify(newUser));
+    setToken(newToken);
+    setUser(newUser);
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, loading, login, logout, updateSession }}>
       {children}
     </AuthContext.Provider>
   );

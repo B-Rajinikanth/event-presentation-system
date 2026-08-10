@@ -1,4 +1,5 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext.jsx';
 import { usePresentationSocket } from '../hooks/usePresentationSocket.js';
 import { usePageTitle } from '../hooks/usePageTitle.js';
@@ -17,12 +18,39 @@ import DisplayConnectionsPanel from '../components/dashboard/DisplayConnectionsP
 export default function Dashboard() {
   usePageTitle('SUH Admin: Event Control Room');
   const { token } = useAuth();
-  const { state, connected, otp, displays, connectError, connectErrorData, retry, socket } = usePresentationSocket(
-    'admin',
-    token
-  );
+  const navigate = useNavigate();
+  const {
+    state,
+    connected,
+    otp,
+    displays,
+    connectError,
+    connectErrorData,
+    forceLogoutMessage,
+    retry,
+    socket,
+  } = usePresentationSocket('admin', token);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  // A superadmin ended this session from /superadmin — the socket is
+  // already disconnected server-side by the time this fires, so there's
+  // nothing to retry; just send them back to login.
+  //
+  // Deliberately NOT calling logout() (AuthContext's setToken/setUser) here:
+  // that would null out `token`, which changes usePresentationSocket's
+  // effect dependencies and re-runs it (tearing down and recreating the
+  // socket) in the same render pass as this navigation — a race that was
+  // dropping the `notice` query param. Instead we clear localStorage
+  // directly (Dashboard is unmounting anyway) and let the freshly-mounted
+  // Login page reset AuthContext's in-memory state once it's safely on its
+  // own render, with no live socket effect to race against.
+  useEffect(() => {
+    if (!forceLogoutMessage) return;
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    navigate(`/login?notice=${encodeURIComponent(forceLogoutMessage)}`, { replace: true });
+  }, [forceLogoutMessage, navigate]);
 
   const run = useCallback(
     async (event, payload) => {

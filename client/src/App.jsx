@@ -4,6 +4,8 @@ import { ThemeProvider } from './context/ThemeContext.jsx';
 import ProtectedRoute from './components/ProtectedRoute.jsx';
 
 import Login from './pages/Login.jsx';
+import ForgotPasswordPage from './pages/ForgotPasswordPage.jsx';
+import ResetPasswordPage from './pages/ResetPasswordPage.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import EventsPage from './pages/EventsPage.jsx';
 import MediaLibraryPage from './pages/MediaLibraryPage.jsx';
@@ -19,6 +21,8 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/login" element={<Login />} />
+            <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
 
             <Route
               path="/dashboard"

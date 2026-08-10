@@ -7,6 +7,14 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
     role: { type: String, enum: ['admin', 'superadmin'], default: 'admin' },
+    active: { type: Boolean, default: true },
+    // Bumped on password change, deactivation, force-logout, or reset —
+    // every previously-issued JWT for this user embeds the tokenVersion it
+    // was signed with, so a mismatch instantly invalidates it without
+    // needing a server-side session store.
+    tokenVersion: { type: Number, default: 0 },
+    resetPasswordTokenHash: { type: String, select: false },
+    resetPasswordExpires: { type: Date, select: false },
   },
   { timestamps: true }
 );
@@ -22,7 +30,7 @@ userSchema.methods.comparePassword = function comparePassword(candidate) {
 };
 
 userSchema.methods.toSafeJSON = function toSafeJSON() {
-  return { id: this._id, name: this.name, email: this.email, role: this.role };
+  return { id: this._id, name: this.name, email: this.email, role: this.role, active: this.active };
 };
 
 export default mongoose.model('User', userSchema);

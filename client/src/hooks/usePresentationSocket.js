@@ -8,6 +8,7 @@ export function usePresentationSocket(role, token) {
   const [displays, setDisplays] = useState(null);
   const [connectError, setConnectError] = useState(null);
   const [connectErrorData, setConnectErrorData] = useState(null);
+  const [forceLogoutMessage, setForceLogoutMessage] = useState(null);
   const [retryCount, setRetryCount] = useState(0);
   const socketRef = useRef(null);
 
@@ -39,6 +40,12 @@ export function usePresentationSocket(role, token) {
     // listener before that first push arrives.
     socket.on('otp:update', (nextOtp) => setOtp(nextOtp));
     socket.on('displays:update', (nextDisplays) => setDisplays(nextDisplays));
+    // A superadmin can end this admin's session from /superadmin
+    // (deactivate/reset password/remove/force-logout) — the server disconnects
+    // this socket right after emitting this, so there's nothing to retry.
+    socket.on('force-logout', (payload) => {
+      setForceLogoutMessage(payload?.message || 'Your session was ended by a super admin.');
+    });
 
     return () => {
       socket.disconnect();
@@ -53,5 +60,15 @@ export function usePresentationSocket(role, token) {
   // old rejected one.
   const retry = useCallback(() => setRetryCount((c) => c + 1), []);
 
-  return { state, connected, otp, displays, connectError, connectErrorData, retry, socket: socketRef.current };
+  return {
+    state,
+    connected,
+    otp,
+    displays,
+    connectError,
+    connectErrorData,
+    forceLogoutMessage,
+    retry,
+    socket: socketRef.current,
+  };
 }

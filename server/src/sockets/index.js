@@ -5,14 +5,20 @@ import SubEvent from '../models/SubEvent.js';
 import Media from '../models/Media.js';
 import User from '../models/User.js';
 import { startOtpRotation, getOtpSnapshot } from '../services/otp.js';
+import { setIO, addConnectedAdmin, removeConnectedAdmin } from './registry.js';
 
 let countdownInterval = null;
 
 // superadmin is a superset of admin: it can additionally manage admin
-// accounts (see routes/admins.routes.js), but has the same room-control
-// capability and is subject to the same single-controller exclusivity.
+// accounts (see routes/admins.routes.js) and, unlike a plain admin, is
+// exempt from the single-controller exclusivity lock below — it can always
+// connect, even alongside an existing admin or another superadmin.
 function isAdmin(socket) {
   return ['admin', 'superadmin'].includes(socket.data.user?.role);
+}
+
+function isSuperadmin(socket) {
+  return socket.data.user?.role === 'superadmin';
 }
 
 function requireAdminAck(socket, ack) {
@@ -42,11 +48,26 @@ export function initSocket(io) {
   // always has a current code to show.
   startOtpRotation(io);
 
-  io.use((socket, next) => {
+  // Lets REST routes (admins.routes.js) reach into this live socket server
+  // to force-disconnect a specific admin's session.
+  setIO(io);
+
+  io.use(async (socket, next) => {
     const token = socket.handshake.auth?.token;
     if (token) {
       try {
-        socket.data.user = verifyToken(token);
+        const decoded = verifyToken(token);
+        // A superadmin action (deactivate/reset password/remove/force-logout)
+        // bumps tokenVersion or flips active — checked here so a stale token
+        // can't be used to open a *new* admin connection either, not just to
+        // keep an already-open one alive.
+        if (socket.handshake.query?.role === 'admin') {
+          const user = await User.findById(decoded.id).select('active tokenVersion');
+          if (!user || !user.active || user.tokenVersion !== decoded.tokenVersion) {
+            return next(new Error('Your session is no longer valid. Please log in again.'));
+          }
+        }
+        socket.data.user = decoded;
       } catch {
         // Invalid token: treat as unauthenticated (display/camera clients don't need auth).
       }
@@ -68,7 +89,9 @@ export function initSocket(io) {
     if (role === 'camera' && registry.cameraSocketId) {
       return next(new Error('Another camera is already connected.'));
     }
-    if (role === 'admin' && isAdmin(socket) && registry.adminSocketId) {
+    // Superadmin never competes for this slot — it's exempt from the
+    // single-controller lock entirely, so it neither blocks nor is blocked.
+    if (role === 'admin' && isAdmin(socket) && !isSuperadmin(socket) && registry.adminSocketId) {
       const controller = registry.adminUser;
       const err = new Error(
         controller
@@ -113,22 +136,32 @@ export function initSocket(io) {
     // joining a room lets otp.js/broadcastDisplaysUpdate push with a single
     // io.to('admin').emit(...) rather than tracking admin ids by hand.
     if (isAdmin(socket)) {
-      registry.adminSocketId = socket.id;
+      // Tracked for every admin-role socket (plain admin or superadmin) so a
+      // superadmin's force-logout/deactivate/reset-password action can reach
+      // this exact connection, even though only plain admins occupy the
+      // exclusivity slot below.
+      addConnectedAdmin(socket.data.user.id, socket.id);
+      if (!isSuperadmin(socket)) {
+        registry.adminSocketId = socket.id;
+      }
       socket.join('admin');
       socket.emit('otp:update', getOtpSnapshot());
       socket.emit('displays:update', { count: registry.displaySocketIds.size, locked: registry.displaysLocked });
       // Fire-and-forget: caches this admin's identity so a rejected
       // duplicate admin connection can be told who's currently in control.
       // Not needed synchronously, so it's fine that this resolves slightly
-      // after the listener registrations below.
-      User.findById(socket.data.user.id)
-        .select('name email')
-        .then((user) => {
-          if (registry.adminSocketId === socket.id) {
-            registry.adminUser = user ? { name: user.name, email: user.email } : null;
-          }
-        })
-        .catch(() => {});
+      // after the listener registrations below. Only plain admins occupy
+      // this slot, so a connecting superadmin never overwrites it.
+      if (!isSuperadmin(socket)) {
+        User.findById(socket.data.user.id)
+          .select('name email')
+          .then((user) => {
+            if (registry.adminSocketId === socket.id) {
+              registry.adminUser = user ? { name: user.name, email: user.email } : null;
+            }
+          })
+          .catch(() => {});
+      }
     }
 
     socket.on('disconnect', () => {
@@ -144,6 +177,9 @@ export function initSocket(io) {
         for (const displayId of registry.displaySocketIds) {
           io.to(displayId).emit('webrtc:camera-left');
         }
+      }
+      if (isAdmin(socket)) {
+        removeConnectedAdmin(socket.data.user.id, socket.id);
       }
       if (registry.adminSocketId === socket.id) {
         registry.adminSocketId = null;
