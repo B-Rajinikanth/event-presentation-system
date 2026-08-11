@@ -46,6 +46,13 @@ function DisplayScreenContent() {
   // box with just the "LIVE" badge — that silence is exactly what made an
   // ICE failure indistinguishable from "working" when this was reported.
   const [peerStatus, setPeerStatus] = useState('waiting'); // waiting | connecting | connected | failed
+  // Which *kind* of network path is even being tried — the difference
+  // between "no candidates at all" (something's blocking WebRTC outright),
+  // "host/srflx only" (direct or STUN-reflexive paths exist but no TURN
+  // relay came back, so a NAT that needs relaying has no fallback), and
+  // "relay present but still failed" (the TURN server itself couldn't be
+  // reached or authenticated) point at three completely different fixes.
+  const [iceDebug, setIceDebug] = useState({ state: 'new', host: 0, srflx: 0, relay: 0 });
 
   const layout = state?.layout ?? 'idle';
   const showPoster = layout === 'poster' && state?.activePoster;
@@ -149,6 +156,7 @@ function DisplayScreenContent() {
       pendingRemoteCandidatesRef.current = [];
       if (videoRef.current) videoRef.current.srcObject = null;
       setPeerStatus('waiting');
+      setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0 });
     }
 
     async function handleOffer({ offer, from }) {
@@ -176,8 +184,18 @@ function DisplayScreenContent() {
         else if (pc.connectionState === 'connecting') setPeerStatus('connecting');
       };
 
+      pc.oniceconnectionstatechange = () => {
+        setIceDebug((info) => ({ ...info, state: pc.iceConnectionState }));
+      };
+
       pc.onicecandidate = (event) => {
         if (event.candidate) {
+          // 'host' = direct LAN path, 'srflx' = STUN-discovered public
+          // address, 'relay' = TURN. Which of these show up (or don't) is
+          // the fastest way to tell "nothing can leave this network" from
+          // "direct paths work but the TURN relay never responded".
+          const type = event.candidate.type;
+          setIceDebug((info) => ({ ...info, [type]: (info[type] || 0) + 1 }));
           socket.emit('webrtc:ice-candidate', { candidate: event.candidate, to: from });
         }
       };
@@ -328,6 +346,12 @@ function DisplayScreenContent() {
                         network issue between them. Ask the camera operator to check their connection
                         and restart the camera.
                       </span>
+                      <button
+                        onClick={retry}
+                        className="mt-2 rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/20"
+                      >
+                        Retry Connection
+                      </button>
                     </>
                   ) : (
                     <>
@@ -339,6 +363,14 @@ function DisplayScreenContent() {
                       </span>
                     </>
                   )}
+                  {/* Diagnostic line — host/srflx/relay candidate counts and ICE
+                      state, so a stuck connection can be told apart (nothing
+                      leaving the network vs. direct path but no TURN vs. TURN
+                      unreachable) without opening devtools on an unattended
+                      screen. */}
+                  <span className="mt-1 font-mono text-xs text-slate-600">
+                    ICE: {iceDebug.state} · host:{iceDebug.host} srflx:{iceDebug.srflx} relay:{iceDebug.relay}
+                  </span>
                 </div>
               )}
               <span className="absolute left-4 top-4 flex items-center gap-2 rounded bg-red-600/90 px-3 py-1 text-sm font-bold uppercase text-white">

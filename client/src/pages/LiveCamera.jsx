@@ -35,6 +35,12 @@ function LiveCameraContent() {
   const [status, setStatus] = useState('idle'); // idle | starting | connecting | live | error
   const [error, setError] = useState('');
   const [liveCount, setLiveCount] = useState(0);
+  // Same reasoning as DisplayScreen's iceDebug: which candidate types show
+  // up (or don't) tells "nothing can leave this network" apart from "direct
+  // paths work but TURN never came back" apart from "TURN relay present but
+  // still failed" — three different fixes, indistinguishable from
+  // "Waiting for display screen..." alone.
+  const [iceDebug, setIceDebug] = useState({ state: 'new', host: 0, srflx: 0, relay: 0 });
 
   const recomputeStatus = useCallback(() => {
     const states = [...peersRef.current.values()].map((p) => p.pc.connectionState);
@@ -64,7 +70,13 @@ function LiveCameraContent() {
 
       pc.onicecandidate = (event) => {
         if (!event.candidate) return;
+        const type = event.candidate.type; // host | srflx | relay | prflx
+        setIceDebug((info) => ({ ...info, [type]: (info[type] || 0) + 1 }));
         socketInstance.emit('webrtc:ice-candidate', { candidate: event.candidate, to: displayId });
+      };
+
+      pc.oniceconnectionstatechange = () => {
+        setIceDebug((info) => ({ ...info, state: pc.iceConnectionState }));
       };
 
       pc.onconnectionstatechange = () => {
@@ -144,6 +156,7 @@ function LiveCameraContent() {
   async function startCamera() {
     setError('');
     setStatus('starting');
+    setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0 });
     try {
       // Prefer the rear/environment-facing camera — this is a live coverage
       // tool meant to film the event, not a selfie cam. `ideal` (not `exact`)
@@ -176,6 +189,7 @@ function LiveCameraContent() {
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     setLiveCount(0);
     setStatus('idle');
+    setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0 });
   }
 
   useEffect(() => stopCamera, []);
@@ -243,6 +257,14 @@ function LiveCameraContent() {
       <p className="text-xs uppercase tracking-wide text-slate-500">
         Status: <span className="font-semibold text-slate-300">{statusLabel}</span>
       </p>
+
+      {/* Only useful while something's still being negotiated — once truly
+          live there's nothing left to diagnose. */}
+      {(status === 'starting' || status === 'connecting') && (
+        <p className="font-mono text-xs text-slate-600">
+          ICE: {iceDebug.state} · host:{iceDebug.host} srflx:{iceDebug.srflx} relay:{iceDebug.relay}
+        </p>
+      )}
     </div>
   );
 }
