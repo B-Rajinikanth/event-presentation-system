@@ -40,6 +40,12 @@ function DisplayScreenContent() {
   const [celebrateKey, setCelebrateKey] = useState(0);
   const [celebrating, setCelebrating] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
+  // Surfaces WebRTC connection progress so a stuck/failed peer connection
+  // (e.g. the camera and display can't find a path through NAT and the
+  // TURN relay is unreachable) shows *something* instead of a silent dark
+  // box with just the "LIVE" badge — that silence is exactly what made an
+  // ICE failure indistinguishable from "working" when this was reported.
+  const [peerStatus, setPeerStatus] = useState('waiting'); // waiting | connecting | connected | failed
 
   const layout = state?.layout ?? 'idle';
   const showPoster = layout === 'poster' && state?.activePoster;
@@ -142,10 +148,12 @@ function DisplayScreenContent() {
       streamRef.current = null;
       pendingRemoteCandidatesRef.current = [];
       if (videoRef.current) videoRef.current.srcObject = null;
+      setPeerStatus('waiting');
     }
 
     async function handleOffer({ offer, from }) {
       closePeerConnection();
+      setPeerStatus('connecting');
 
       const pc = new RTCPeerConnection(RTC_CONFIG);
       pcRef.current = pc;
@@ -153,7 +161,19 @@ function DisplayScreenContent() {
 
       pc.ontrack = (event) => {
         streamRef.current = event.streams[0];
+        setPeerStatus('connected');
         attachAndPlay(event.streams[0]);
+      };
+
+      // Without this, a NAT/firewall path that never completes (the TURN
+      // relay is unreachable, most often across two different networks —
+      // camera on mobile data, display on venue WiFi) leaves the screen on
+      // a silent dark box forever: the "LIVE" badge is up, but no frame
+      // ever arrives and nothing here said why.
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === 'connected') setPeerStatus('connected');
+        else if (['failed', 'disconnected'].includes(pc.connectionState)) setPeerStatus('failed');
+        else if (pc.connectionState === 'connecting') setPeerStatus('connecting');
       };
 
       pc.onicecandidate = (event) => {
@@ -298,6 +318,29 @@ function DisplayScreenContent() {
               className={`relative bg-slate-900/60 ${splitLive ? 'h-1/2 w-full sm:h-full sm:w-1/2' : 'h-full w-full'}`}
             >
               <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
+              {peerStatus !== 'connected' && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-slate-950/90 text-center">
+                  {peerStatus === 'failed' ? (
+                    <>
+                      <span className="text-lg font-semibold text-rose-400">Camera connection failed</span>
+                      <span className="max-w-xs text-sm text-slate-400">
+                        The camera and this screen couldn't establish a video connection — likely a
+                        network issue between them. Ask the camera operator to check their connection
+                        and restart the camera.
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="text-lg font-semibold text-slate-300">
+                        {peerStatus === 'connecting' ? 'Connecting to camera...' : 'Waiting for camera...'}
+                      </span>
+                      <span className="max-w-xs text-sm text-slate-500">
+                        The video feed will appear here as soon as the connection is established.
+                      </span>
+                    </>
+                  )}
+                </div>
+              )}
               <span className="absolute left-4 top-4 flex items-center gap-2 rounded bg-red-600/90 px-3 py-1 text-sm font-bold uppercase text-white">
                 ● Live
               </span>
