@@ -52,7 +52,7 @@ function DisplayScreenContent() {
   // relay came back, so a NAT that needs relaying has no fallback), and
   // "relay present but still failed" (the TURN server itself couldn't be
   // reached or authenticated) point at three completely different fixes.
-  const [iceDebug, setIceDebug] = useState({ state: 'new', host: 0, srflx: 0, relay: 0 });
+  const [iceDebug, setIceDebug] = useState({ state: 'new', host: 0, srflx: 0, relay: 0, error: null });
 
   const layout = state?.layout ?? 'idle';
   const showPoster = layout === 'poster' && state?.activePoster;
@@ -156,7 +156,7 @@ function DisplayScreenContent() {
       pendingRemoteCandidatesRef.current = [];
       if (videoRef.current) videoRef.current.srcObject = null;
       setPeerStatus('waiting');
-      setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0 });
+      setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0, error: null });
     }
 
     async function handleOffer({ offer, from }) {
@@ -198,6 +198,17 @@ function DisplayScreenContent() {
           setIceDebug((info) => ({ ...info, [type]: (info[type] || 0) + 1 }));
           socket.emit('webrtc:ice-candidate', { candidate: event.candidate, to: from });
         }
+      };
+
+      // Fires once per STUN/TURN server that fails to respond at all, or
+      // rejects the request (e.g. bad/expired TURN credentials) — this is
+      // the one place that says *why* relay candidates never show up,
+      // instead of just "relay:0" with no explanation.
+      pc.onicecandidateerror = (event) => {
+        setIceDebug((info) => ({
+          ...info,
+          error: `${event.errorCode} ${event.errorText} (${event.url || 'unknown server'})`,
+        }));
       };
 
       await pc.setRemoteDescription(new RTCSessionDescription(offer));
@@ -371,6 +382,9 @@ function DisplayScreenContent() {
                   <span className="mt-1 font-mono text-xs text-slate-600">
                     ICE: {iceDebug.state} · host:{iceDebug.host} srflx:{iceDebug.srflx} relay:{iceDebug.relay}
                   </span>
+                  {iceDebug.error && (
+                    <span className="max-w-xs font-mono text-xs text-amber-600">{iceDebug.error}</span>
+                  )}
                 </div>
               )}
               <span className="absolute left-4 top-4 flex items-center gap-2 rounded bg-red-600/90 px-3 py-1 text-sm font-bold uppercase text-white">

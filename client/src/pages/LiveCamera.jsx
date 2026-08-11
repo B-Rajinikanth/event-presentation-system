@@ -40,7 +40,7 @@ function LiveCameraContent() {
   // paths work but TURN never came back" apart from "TURN relay present but
   // still failed" — three different fixes, indistinguishable from
   // "Waiting for display screen..." alone.
-  const [iceDebug, setIceDebug] = useState({ state: 'new', host: 0, srflx: 0, relay: 0 });
+  const [iceDebug, setIceDebug] = useState({ state: 'new', host: 0, srflx: 0, relay: 0, error: null });
 
   const recomputeStatus = useCallback(() => {
     const states = [...peersRef.current.values()].map((p) => p.pc.connectionState);
@@ -77,6 +77,16 @@ function LiveCameraContent() {
 
       pc.oniceconnectionstatechange = () => {
         setIceDebug((info) => ({ ...info, state: pc.iceConnectionState }));
+      };
+
+      // Fires per STUN/TURN server that fails outright or rejects the
+      // request (e.g. bad/expired TURN credentials) — the concrete reason
+      // relay candidates never show up, instead of just "relay:0".
+      pc.onicecandidateerror = (event) => {
+        setIceDebug((info) => ({
+          ...info,
+          error: `${event.errorCode} ${event.errorText} (${event.url || 'unknown server'})`,
+        }));
       };
 
       pc.onconnectionstatechange = () => {
@@ -156,7 +166,7 @@ function LiveCameraContent() {
   async function startCamera() {
     setError('');
     setStatus('starting');
-    setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0 });
+    setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0, error: null });
     try {
       // Prefer the rear/environment-facing camera — this is a live coverage
       // tool meant to film the event, not a selfie cam. `ideal` (not `exact`)
@@ -189,7 +199,7 @@ function LiveCameraContent() {
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     setLiveCount(0);
     setStatus('idle');
-    setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0 });
+    setIceDebug({ state: 'new', host: 0, srflx: 0, relay: 0, error: null });
   }
 
   useEffect(() => stopCamera, []);
@@ -261,9 +271,12 @@ function LiveCameraContent() {
       {/* Only useful while something's still being negotiated — once truly
           live there's nothing left to diagnose. */}
       {(status === 'starting' || status === 'connecting') && (
-        <p className="font-mono text-xs text-slate-600">
-          ICE: {iceDebug.state} · host:{iceDebug.host} srflx:{iceDebug.srflx} relay:{iceDebug.relay}
-        </p>
+        <>
+          <p className="font-mono text-xs text-slate-600">
+            ICE: {iceDebug.state} · host:{iceDebug.host} srflx:{iceDebug.srflx} relay:{iceDebug.relay}
+          </p>
+          {iceDebug.error && <p className="max-w-xs font-mono text-xs text-amber-600">{iceDebug.error}</p>}
+        </>
       )}
     </div>
   );
