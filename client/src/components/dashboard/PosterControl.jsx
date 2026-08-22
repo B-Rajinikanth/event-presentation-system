@@ -26,7 +26,14 @@ export default function PosterControl({ state, onShow, onHide, busy }) {
     return () => {
       cancelled = true;
     };
-  }, [eventId, state?.activePoster]);
+    // Depend on the poster's id, not the object itself — the server
+    // broadcasts a fresh state:update (and a freshly-populated
+    // activePoster object) every second while the countdown is running,
+    // even when the active poster hasn't changed. Depending on the whole
+    // object re-ran this fetch every second, flashing "Loading media..."
+    // and reloading every thumbnail continuously.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [eventId, state?.activePoster?._id]);
 
   const activeId = state?.activePoster?._id;
 
